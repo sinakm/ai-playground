@@ -55,3 +55,33 @@ def test_stop_replaces_video_when_exists(tmp_path):
 
     assert (tmp_path / "capture.mp4").exists()
     assert not video.exists()
+
+
+def test_stop_logs_audio_error_when_video_succeeds(tmp_path):
+    """Recorder.stop() logs audio errors even when video succeeds."""
+    rec = Recorder(tmp_path, audio=False)
+    fake_ffmpeg = MagicMock()
+    fake_ffmpeg.poll.return_value = 0
+    fake_ffmpeg.returncode = 0
+    rec._ffmpeg = fake_ffmpeg
+
+    # Create a finished dummy thread
+    import threading
+    dummy_thread = threading.Thread()
+    dummy_thread.start()
+    dummy_thread.join()
+
+    rec._thread = dummy_thread
+    rec._audio_error = "RuntimeError('x')"
+    rec._blocks = []  # Empty blocks, so no mux
+
+    video = tmp_path / "video.mp4"
+    video.write_text("test video data")
+
+    rec.stop()
+
+    assert (tmp_path / "capture.mp4").exists()
+    error_file = tmp_path / "recording_error.txt"
+    assert error_file.exists()
+    content = error_file.read_text()
+    assert "audio:" in content

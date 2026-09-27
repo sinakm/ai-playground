@@ -84,6 +84,7 @@ class Recorder:
                     self._ffmpeg.kill()
                     self._ffmpeg.wait()
             ffmpeg_code = self._ffmpeg.returncode
+
         video = self.run_dir / "video.mp4"
         final = self.run_dir / "capture.mp4"
         if self._thread is not None:
@@ -94,11 +95,20 @@ class Recorder:
             if self._blocks:
                 try:
                     subprocess.run(ffmpeg_mux_cmd(video, audio, final), check=True)
+                    # Write audio errors before returning, independent of video success
+                    if self._audio_error:
+                        error_file = self.run_dir / "recording_error.txt"
+                        with error_file.open("a") as f:
+                            f.write(f"audio: {self._audio_error}\n")
                     return
                 except subprocess.CalledProcessError as e:
                     error_file = self.run_dir / "recording_error.txt"
                     with error_file.open("a") as f:
                         f.write(f"mux failed: {e}\n")
+                    # Write audio errors before returning
+                    if self._audio_error:
+                        with error_file.open("a") as f:
+                            f.write(f"audio: {self._audio_error}\n")
                     video.replace(final)
                     return
         if not video.exists() or video.stat().st_size == 0:
@@ -109,6 +119,11 @@ class Recorder:
                 with error_file.open("a") as f:
                     f.write(f"audio: {self._audio_error}\n")
             return
+        # Write audio errors before final video.replace, independent of video success
+        if self._audio_error:
+            error_file = self.run_dir / "recording_error.txt"
+            with error_file.open("a") as f:
+                f.write(f"audio: {self._audio_error}\n")
         video.replace(final)
 
 
