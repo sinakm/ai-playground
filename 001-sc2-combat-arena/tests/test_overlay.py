@@ -1,4 +1,4 @@
-from arena.overlay import PANEL_SIZE, card, cumulative, decision_index_for_frames, panel_frame
+from arena.overlay import PANEL_SIZE, card, cumulative, decision_index_for_frames, panel_frame, trim_offset
 
 REC = {
     "action": "spread", "probabilities": {"spread": 0.9, "clump": 0.02, "retreat": 0.03, "attack": 0.04, "stim": 0.01},
@@ -23,3 +23,9 @@ def test_panel_and_card_sizes():
     assert panel_frame(None, None).size == PANEL_SIZE
     assert panel_frame(REC, cumulative([REC])[0]).size == PANEL_SIZE
     assert card(["Jev vs Banelings", "episode 001"]).size == (1920, 1080)
+
+
+def test_trim_offset():
+    assert trim_offset([], record_start_wall=100.0) == 0.0
+    assert trim_offset([{**REC, "wall_time": 105.0}], record_start_wall=100.0) == 4.0
+    assert trim_offset([{**REC, "wall_time": 100.5}], record_start_wall=100.0) == 0.0

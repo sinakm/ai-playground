@@ -37,6 +37,13 @@ def decision_index_for_frames(wall_times: list[float], start_wall: float, n_fram
     return [bisect.bisect_right(wall_times, start_wall + i / fps) - 1 for i in range(n_frames)]
 
 
+def trim_offset(records: list[dict], record_start_wall: float, lead_s: float = 1.0) -> float:
+    """Seconds to trim off the start of the capture so playback begins `lead_s` before the first decision."""
+    if not records:
+        return 0.0
+    return max(0.0, records[0]["wall_time"] - record_start_wall - lead_s)
+
+
 def cumulative(records: list[dict]) -> list[dict]:
     out, tin, tout = [], 0, 0
     for n, r in enumerate(records, start=1):
@@ -105,8 +112,10 @@ def render(run_dir: Path, results_summary: Path) -> Path:
     summary = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
     records = read_jsonl(run_dir / "decisions.jsonl")
     totals = cumulative(records)
-    n_frames = int(_probe_duration(capture) * FPS)
-    idx = decision_index_for_frames([r["wall_time"] for r in records], summary["record_start_wall"], n_frames, FPS)
+    offset = trim_offset(records, summary["record_start_wall"])
+    n_frames = int((_probe_duration(capture) - offset) * FPS)
+    start_wall = summary["record_start_wall"] + offset
+    idx = decision_index_for_frames([r["wall_time"] for r in records], start_wall, n_frames, FPS)
 
     title = run_dir / "title.png"
     ending = run_dir / "results.png"
@@ -119,7 +128,11 @@ def render(run_dir: Path, results_summary: Path) -> Path:
         ["ffprobe", "-v", "error", "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(capture)],
         capture_output=True, text=True, check=True,
     ).stdout
-    audio_in = ["-i", str(capture)] if has_audio else ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
+    audio_in = (
+        ["-ss", f"{offset:.3f}", "-i", str(capture)]
+        if has_audio
+        else ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
+    )
     body_seconds = n_frames / FPS
     gw, gh = GAME_SIZE
     pw, ph = PANEL_SIZE
@@ -134,7 +147,7 @@ def render(run_dir: Path, results_summary: Path) -> Path:
     )
     cmd = [
         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-        "-i", str(capture),
+        "-ss", f"{offset:.3f}", "-i", str(capture),
         "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{pw}x{ph}", "-r", str(FPS), "-i", "-",
         "-loop", "1", "-t", str(CARD_SECONDS), "-i", str(title),
         "-loop", "1", "-t", str(CARD_SECONDS), "-i", str(ending),
