@@ -30,14 +30,17 @@ def play_one(policy_name: str, seed: int, runs_dir: Path, realtime: bool, record
         policy.warmup(WARMUP_STATE)
     recorder = recorder_factory(run_dir) if recorder_factory else None
     bot = ArenaBot(policy, run_dir, seed, realtime, recorder)
-    run_game(
-        maps.get(config.MAP_NAME),
-        [Bot(Race.Terran, bot), Computer(Race.Zerg, Difficulty.VeryEasy)],
-        realtime=realtime,
-        save_replay_as=str(run_dir / "fight.SC2Replay"),
-        random_seed=seed,
-        disable_fog=True,
-    )
+    try:
+        run_game(
+            maps.get(config.MAP_NAME),
+            [Bot(Race.Terran, bot), Computer(Race.Zerg, Difficulty.VeryEasy)],
+            realtime=realtime,
+            save_replay_as=str(run_dir / "fight.SC2Replay"),
+            random_seed=seed,
+            disable_fog=True,
+        )
+    finally:
+        bot.close()
     return run_dir
 
 

@@ -60,6 +60,7 @@ class ArenaBot(BotAI):
         self.decisions = 0
         self.late = 0
         self.finished = False
+        self._closed = False
 
     async def on_start(self):
         if not self.realtime:
@@ -77,6 +78,13 @@ class ArenaBot(BotAI):
         enemies = self.enemy_units.of_type(ENEMY_TYPES)
         loop = self.state.game_loop
         if self.start_loop is None:
+            if loop >= self.spawn_loop + 3 * config.SPAWN_WAIT_LOOPS:
+                # Spawn never settled into a startable state at all (e.g. marine
+                # count never landed on exactly MARINE_COUNT, or no enemies ever
+                # appeared) even after 3x the normal spawn-wait timeout. Give up
+                # on this run rather than looping forever.
+                await self._finish(marines.amount, enemies.amount, 0, result_override="aborted")
+                return
             spawn_timed_out = loop >= self.spawn_loop + config.SPAWN_WAIT_LOOPS
             if not (
                 marines.amount == config.MARINE_COUNT
@@ -149,7 +157,12 @@ class ArenaBot(BotAI):
         })
 
     async def _finish(
-        self, marines_alive: int, enemies_alive: int, elapsed: int, result_override: str | None = None
+        self,
+        marines_alive: int,
+        enemies_alive: int,
+        elapsed: int,
+        result_override: str | None = None,
+        leave: bool = True,
     ) -> None:
         self.finished = True
         if result_override is not None:
@@ -180,7 +193,18 @@ class ArenaBot(BotAI):
         }
         (self.run_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
         self.log.close()
-        await self.client.leave()
+        if leave:
+            await self.client.leave()
+
+    def close(self) -> None:
+        """Idempotent cleanup: safe to call multiple times, from on_end and/or
+        a caller's try/finally around run_game()."""
+        if self._closed:
+            return
+        self._closed = True
+        self.log.close()
+        if self.recorder is not None:
+            self.recorder.stop()
 
     async def on_end(self, game_result: Result):
         if not self.finished:
@@ -190,7 +214,14 @@ class ArenaBot(BotAI):
             # the last state on_step did see, using the engine's own result.
             marines = self.units(UnitTypeId.MARINE)
             enemies = self.enemy_units.of_type(ENEMY_TYPES)
-            elapsed = (self.state.game_loop - self.start_loop) if self.start_loop is not None else 0
-            await self._finish(marines.amount, enemies.amount, elapsed, RESULT_MAP.get(game_result, "timeout"))
-        if self.recorder is not None:
-            self.recorder.stop()
+            if self.start_loop is None:
+                # No fight ever started; the game ended anyway (e.g. resigned
+                # or errored out during spawn). The engine's game_result isn't
+                # a meaningful win/loss/timeout for a fight that never began,
+                # and calling client.leave() here (after the game has already
+                # ended) is unnecessary, so skip both.
+                await self._finish(marines.amount, enemies.amount, 0, result_override="aborted", leave=False)
+            else:
+                elapsed = self.state.game_loop - self.start_loop
+                await self._finish(marines.amount, enemies.amount, elapsed, RESULT_MAP.get(game_result, "timeout"))
+        self.close()

@@ -10,12 +10,16 @@ class DecisionLog:
     def __init__(self, path: Path):
         path.parent.mkdir(parents=True, exist_ok=True)
         self._f = path.open("a", encoding="utf-8")
+        self._closed = False
 
     def write(self, record: dict) -> None:
         self._f.write(json.dumps(record) + "\n")
         self._f.flush()
 
     def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
         self._f.close()
 
 

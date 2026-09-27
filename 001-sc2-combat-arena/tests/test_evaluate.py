@@ -61,3 +61,14 @@ def test_evaluate_skips_realtime_and_writes_files(tmp_path):
     assert (results / "table.md").exists()
     assert (results / "chart.png").stat().st_size > 0
     assert json.loads((results / "summary.json").read_text())["random"]["runs"] == 1
+
+
+def test_evaluate_skips_aborted_runs(tmp_path):
+    runs_dir, results = tmp_path / "runs", tmp_path / "results"
+    runs = [run("random", "win", 3, 16, 12.0), run("random", "aborted", 12, 0, 0.0)]
+    for i, r in enumerate(runs):
+        d = runs_dir / f"r{i}"
+        d.mkdir(parents=True)
+        (d / "summary.json").write_text(json.dumps(r))
+    m = evaluate(runs_dir, results)
+    assert m["random"]["runs"] == 1

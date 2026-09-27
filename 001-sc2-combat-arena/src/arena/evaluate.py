@@ -95,7 +95,7 @@ def evaluate(runs_dir: Path, results_dir: Path) -> dict:
     runs = []
     for p in sorted(runs_dir.glob("*/summary.json")):
         r = json.loads(p.read_text(encoding="utf-8"))
-        if not r["realtime"]:
+        if not r["realtime"] and r["result"] != "aborted":
             runs.append(r)
     metrics = summarize(runs)
     results_dir.mkdir(parents=True, exist_ok=True)

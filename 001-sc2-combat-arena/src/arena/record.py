@@ -44,6 +44,7 @@ class Recorder:
         self._thread: threading.Thread | None = None
         self._blocks: list[np.ndarray] = []
         self._audio_error: str | None = None
+        self._stopped = False
 
     def start(self) -> None:
         if self.audio:
@@ -75,6 +76,9 @@ class Recorder:
             w.writeframes(pcm.tobytes())
 
     def stop(self) -> None:
+        if self._stopped:
+            return
+        self._stopped = True
         ffmpeg_code = None
         if self._ffmpeg is not None:
             if self._ffmpeg.poll() is None:
