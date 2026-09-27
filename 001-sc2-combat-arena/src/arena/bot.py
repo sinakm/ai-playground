@@ -56,6 +56,7 @@ class ArenaBot(BotAI):
         self.zergling_anchor: Point2 | None = None
         self.last_decision_loop: int | None = None
         self.last_enemy_order_loop: int | None = None
+        self.last_camera_loop: int | None = None
         self.latencies: list[float] = []
         self.input_tokens = 0
         self.output_tokens = 0
@@ -105,6 +106,11 @@ class ArenaBot(BotAI):
         if not marines or not enemies or elapsed >= config.MAX_FIGHT_LOOPS:
             await self._finish(marines.amount, enemies.amount, elapsed)
             return
+        if self.last_camera_loop is None or loop - self.last_camera_loop >= config.CAMERA_FOLLOW_INTERVAL_LOOPS:
+            self.last_camera_loop = loop
+            await self.client.move_camera(
+                Point2(((marines.center.x + enemies.center.x) / 2, (marines.center.y + enemies.center.y) / 2))
+            )
         if self.last_enemy_order_loop is None or loop - self.last_enemy_order_loop >= config.ENEMY_REORDER_INTERVAL_LOOPS:
             self.last_enemy_order_loop = loop
             for e in enemies:

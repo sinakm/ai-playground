@@ -107,7 +107,10 @@ def _probe_duration(video: Path) -> float:
 def _results_lines(results: dict) -> list[str]:
     lines = ["Results: 10 fights per policy"]
     for policy, m in results.items():
-        lines.append(f"{policy}: {m['wins']}/{m['runs']} wins, {m['mean_marines_alive']:.1f} marines alive")
+        lines.append(
+            f"{policy}: {m['wins']}/{m['runs']} wins, {m['mean_marines_alive']:.1f} marines alive, "
+            f"{m['mean_enemies_killed']:.1f} Zerg killed"
+        )
     return lines
 
 
