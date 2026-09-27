@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+*.mp4
+*.mkv
+*.mov
+*.SC2Replay
+StarCraftII/
