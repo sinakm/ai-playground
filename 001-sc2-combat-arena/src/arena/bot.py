@@ -108,6 +108,7 @@ class ArenaBot(BotAI):
 
     async def _spawn(self):
         self.spawn_loop = self.state.game_loop
+        # toggle: reveals the map; do not combine with run_game(disable_fog=True)
         await self.client.debug_show_map()
         await self.client.debug_upgrade()
         await self.client.debug_control_enemy()
@@ -117,6 +118,7 @@ class ArenaBot(BotAI):
             [UnitTypeId.BANELING, config.BANELING_COUNT, c + Point2(config.BANELING_OFFSET), 2],
             [UnitTypeId.ZERGLING, config.ZERGLING_COUNT, c + Point2(config.ZERGLING_OFFSET), 2],
         ])
+        await self.client.move_camera(Point2(config.CENTER))
 
     def _decide(self, marines, enemies, elapsed: int) -> None:
         mv = [to_view(u) for u in marines]
