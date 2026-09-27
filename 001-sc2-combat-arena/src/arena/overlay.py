@@ -147,11 +147,19 @@ def render(run_dir: Path, results_summary: Path) -> Path:
     ]
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
     cache: dict[int, bytes] = {}
-    for i in idx:
-        if i not in cache:
-            cache[i] = panel_frame(records[i] if i >= 0 else None, totals[i] if i >= 0 else None).tobytes()
-        proc.stdin.write(cache[i])
-    proc.stdin.close()
-    if proc.wait() != 0:
-        raise RuntimeError("ffmpeg composite failed")
+    try:
+        for i in idx:
+            if i not in cache:
+                cache[i] = panel_frame(records[i] if i >= 0 else None, totals[i] if i >= 0 else None).tobytes()
+            proc.stdin.write(cache[i])
+    except (BrokenPipeError, OSError):
+        pass
+    finally:
+        try:
+            proc.stdin.close()
+        except OSError:
+            pass
+        rc = proc.wait()
+    if rc != 0:
+        raise RuntimeError(f"ffmpeg composite failed with code {rc}")
     return out
