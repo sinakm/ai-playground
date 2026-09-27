@@ -37,6 +37,7 @@ def play_one(policy_name: str, seed: int, runs_dir: Path, realtime: bool, record
             realtime=realtime,
             save_replay_as=str(run_dir / "fight.SC2Replay"),
             random_seed=seed,
+            disable_fog=True,
         )
     finally:
         bot.close()
