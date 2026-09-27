@@ -100,6 +100,7 @@ class ArenaBot(BotAI):
 
     async def _spawn(self):
         self.spawn_loop = self.state.game_loop
+        await self.client.debug_show_map()
         await self.client.debug_upgrade()
         await self.client.debug_control_enemy()
         c = Point2(config.CENTER)

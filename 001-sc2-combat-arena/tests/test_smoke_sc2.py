@@ -12,6 +12,7 @@ def test_attack_move_fight_writes_log_and_summary(tmp_path):
     summary = json.loads((run_dir / "summary.json").read_text())
     assert summary["result"] in {"win", "loss", "timeout"}
     assert summary["decisions"] > 0
+    assert summary["initial_enemies"] >= 14
     records = read_jsonl(run_dir / "decisions.jsonl")
     assert records[0]["action"] == "attack"
     assert records[0]["marines_alive"] == 12
