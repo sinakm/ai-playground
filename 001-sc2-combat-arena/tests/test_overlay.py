@@ -25,6 +25,10 @@ def test_panel_and_card_sizes():
     assert card(["Jev vs Banelings", "episode 001"]).size == (1920, 1080)
 
 
+def test_panel_frame_accepts_custom_header():
+    assert panel_frame(None, None, header="RANDOM PICKS").size == PANEL_SIZE
+
+
 def test_panel_frame_handles_none_confidence_and_probabilities():
     rec = {**REC, "confidence": None, "probabilities": None}
     assert panel_frame(rec, cumulative([rec])[0]).size == PANEL_SIZE

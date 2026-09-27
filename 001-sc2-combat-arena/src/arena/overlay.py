@@ -23,6 +23,12 @@ MUTED = (140, 145, 160)
 BAR = (76, 114, 176)
 CHOSEN = (85, 168, 104)
 
+POLICY_LABELS = {
+    "jev_squad": ("JEV DECIDES", "Jev vs Banelings", "TypeSafe Jev System One model"),
+    "random": ("RANDOM PICKS", "Random vs Banelings", "baseline: a random squad action each step"),
+    "attack_move": ("ATTACK-MOVE", "Attack-move vs Banelings", "baseline: no AI, just charge"),
+}
+
 
 def _font(size: int):
     for name in ("arialbd.ttf", "DejaVuSans-Bold.ttf", "Arial Bold.ttf"):
@@ -53,10 +59,10 @@ def cumulative(records: list[dict]) -> list[dict]:
     return out
 
 
-def panel_frame(record: dict | None, totals: dict | None) -> Image.Image:
+def panel_frame(record: dict | None, totals: dict | None, header: str = "JEV DECIDES") -> Image.Image:
     img = Image.new("RGB", PANEL_SIZE, BG)
     d = ImageDraw.Draw(img)
-    d.text((32, 40), "JEV DECIDES", font=_font(28), fill=MUTED)
+    d.text((32, 40), header, font=_font(28), fill=MUTED)
     if record is None:
         d.text((32, 100), "waiting...", font=_font(56), fill=FG)
         return img
@@ -124,9 +130,11 @@ def render(run_dir: Path, results_summary: Path) -> Path:
     start_wall = summary["record_start_wall"] + offset
     idx = decision_index_for_frames([r["wall_time"] for r in records], start_wall, n_frames, FPS)
 
+    header, card_title, subtitle = POLICY_LABELS.get(summary["policy"], POLICY_LABELS["jev_squad"])
+
     title = run_dir / "title.png"
     ending = run_dir / "results.png"
-    card(["Jev vs Banelings", "12 Marines, one squad decision every 0.18 s", "TypeSafe Jev System One model"]).save(title)
+    card([card_title, "12 Marines, one squad decision every 0.18 s", subtitle]).save(title)
     results = json.loads(results_summary.read_text(encoding="utf-8")) if results_summary.exists() else {}
     card(_results_lines(results)).save(ending)
 
@@ -170,7 +178,9 @@ def render(run_dir: Path, results_summary: Path) -> Path:
     try:
         for i in idx:
             if i not in cache:
-                cache[i] = panel_frame(records[i] if i >= 0 else None, totals[i] if i >= 0 else None).tobytes()
+                cache[i] = panel_frame(
+                    records[i] if i >= 0 else None, totals[i] if i >= 0 else None, header=header
+                ).tobytes()
             proc.stdin.write(cache[i])
     except (BrokenPipeError, OSError):
         pass
