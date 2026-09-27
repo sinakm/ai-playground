@@ -78,16 +78,18 @@ class ArenaBot(BotAI):
         enemies = self.enemy_units.of_type(ENEMY_TYPES)
         loop = self.state.game_loop
         if self.start_loop is None:
-            if loop >= self.spawn_loop + 3 * config.SPAWN_WAIT_LOOPS:
+            if loop >= self.spawn_loop + config.PRE_FIGHT_WAIT_LOOPS + 3 * config.SPAWN_WAIT_LOOPS:
                 # Spawn never settled into a startable state at all (e.g. marine
                 # count never landed on exactly MARINE_COUNT, or no enemies ever
-                # appeared) even after 3x the normal spawn-wait timeout. Give up
-                # on this run rather than looping forever.
+                # appeared) even after the pre-fight wait plus 3x the normal
+                # spawn-wait timeout. Give up on this run rather than looping
+                # forever.
                 await self._finish(marines.amount, enemies.amount, 0, result_override="aborted")
                 return
             spawn_timed_out = loop >= self.spawn_loop + config.SPAWN_WAIT_LOOPS
             if not (
-                marines.amount == config.MARINE_COUNT
+                loop >= self.spawn_loop + config.PRE_FIGHT_WAIT_LOOPS
+                and marines.amount == config.MARINE_COUNT
                 and (enemies.amount >= TOTAL_ENEMIES or spawn_timed_out)
                 and enemies.amount > 0
             ):
