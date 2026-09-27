@@ -43,6 +43,7 @@ class Recorder:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._blocks: list[np.ndarray] = []
+        self._audio_error: str | None = None
 
     def start(self) -> None:
         if self.audio:
@@ -54,12 +55,15 @@ class Recorder:
         self.start_wall = time.time()
 
     def _record_audio(self) -> None:
-        import soundcard as sc
+        try:
+            import soundcard as sc
 
-        mic = sc.get_microphone(id=str(sc.default_speaker().name), include_loopback=True)
-        with mic.recorder(samplerate=SAMPLE_RATE, channels=CHANNELS) as rec:
-            while not self._stop.is_set():
-                self._blocks.append(rec.record(numframes=BLOCK))
+            mic = sc.get_microphone(id=str(sc.default_speaker().name), include_loopback=True)
+            with mic.recorder(samplerate=SAMPLE_RATE, channels=CHANNELS) as rec:
+                while not self._stop.is_set():
+                    self._blocks.append(rec.record(numframes=BLOCK))
+        except Exception as exc:
+            self._audio_error = repr(exc)
 
     def _write_wav(self, path: Path) -> None:
         data = np.concatenate(self._blocks) if self._blocks else np.zeros((0, CHANNELS))
@@ -71,8 +75,15 @@ class Recorder:
             w.writeframes(pcm.tobytes())
 
     def stop(self) -> None:
+        ffmpeg_code = None
         if self._ffmpeg is not None:
-            self._ffmpeg.communicate(input=b"q", timeout=30)
+            if self._ffmpeg.poll() is None:
+                try:
+                    self._ffmpeg.communicate(input=b"q", timeout=30)
+                except subprocess.TimeoutExpired:
+                    self._ffmpeg.kill()
+                    self._ffmpeg.wait()
+            ffmpeg_code = self._ffmpeg.returncode
         video = self.run_dir / "video.mp4"
         final = self.run_dir / "capture.mp4"
         if self._thread is not None:
@@ -81,8 +92,23 @@ class Recorder:
             audio = self.run_dir / "audio.wav"
             self._write_wav(audio)
             if self._blocks:
-                subprocess.run(ffmpeg_mux_cmd(video, audio, final), check=True)
-                return
+                try:
+                    subprocess.run(ffmpeg_mux_cmd(video, audio, final), check=True)
+                    return
+                except subprocess.CalledProcessError as e:
+                    error_file = self.run_dir / "recording_error.txt"
+                    with error_file.open("a") as f:
+                        f.write(f"mux failed: {e}\n")
+                    video.replace(final)
+                    return
+        if not video.exists() or video.stat().st_size == 0:
+            error_file = self.run_dir / "recording_error.txt"
+            with error_file.open("w") as f:
+                f.write(f"ffmpeg exited with code {ffmpeg_code}; no video captured\n")
+            if self._audio_error:
+                with error_file.open("a") as f:
+                    f.write(f"audio: {self._audio_error}\n")
+            return
         video.replace(final)
 
 
