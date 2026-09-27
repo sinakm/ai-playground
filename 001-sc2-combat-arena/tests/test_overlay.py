@@ -25,6 +25,11 @@ def test_panel_and_card_sizes():
     assert card(["Jev vs Banelings", "episode 001"]).size == (1920, 1080)
 
 
+def test_panel_frame_handles_none_confidence_and_probabilities():
+    rec = {**REC, "confidence": None, "probabilities": None}
+    assert panel_frame(rec, cumulative([rec])[0]).size == PANEL_SIZE
+
+
 def test_trim_offset():
     assert trim_offset([], record_start_wall=100.0) == 0.0
     assert trim_offset([{**REC, "wall_time": 105.0}], record_start_wall=100.0) == 4.0

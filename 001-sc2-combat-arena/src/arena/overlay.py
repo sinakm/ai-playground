@@ -61,14 +61,18 @@ def panel_frame(record: dict | None, totals: dict | None) -> Image.Image:
         d.text((32, 100), "waiting...", font=_font(56), fill=FG)
         return img
     d.text((32, 90), record["action"].upper(), font=_font(72), fill=CHOSEN)
-    d.text((32, 190), f"confidence {record['confidence']:.2f}", font=_font(30), fill=FG)
+    confidence = record["confidence"]
+    conf_text = f"confidence {confidence:.2f}" if confidence is not None else "confidence -"
+    d.text((32, 190), conf_text, font=_font(30), fill=FG)
     y = 270
+    probabilities = record["probabilities"]
     for action in config.ACTIONS:
-        p = (record["probabilities"] or {}).get(action, 0.0)
+        p = (probabilities or {}).get(action, 0.0)
         color = CHOSEN if action == record["action"] else BAR
         d.text((32, y), action, font=_font(26), fill=FG)
         d.rectangle([32, y + 36, 32 + int(400 * p), y + 60], fill=color)
-        d.text((440 - 70, y), f"{p:.2f}", font=_font(26), fill=MUTED)
+        p_text = f"{p:.2f}" if probabilities is not None else "-"
+        d.text((440 - 70, y), p_text, font=_font(26), fill=MUTED)
         y += 90
     stats = [
         f"latency   {record['latency_ms']:.0f} ms" + ("  LATE" if record["late"] else ""),

@@ -52,6 +52,8 @@ class ArenaBot(BotAI):
         self.start_loop: int | None = None
         self.spawn_loop: int | None = None
         self.initial_enemies: int | None = None
+        self.baneling_anchor: Point2 | None = None
+        self.zergling_anchor: Point2 | None = None
         self.last_decision_loop: int | None = None
         self.last_enemy_order_loop: int | None = None
         self.latencies: list[float] = []
@@ -86,6 +88,9 @@ class ArenaBot(BotAI):
                 # forever.
                 await self._finish(marines.amount, enemies.amount, 0, result_override="aborted")
                 return
+            if self.last_enemy_order_loop is None or loop - self.last_enemy_order_loop >= config.ENEMY_REORDER_INTERVAL_LOOPS:
+                self.last_enemy_order_loop = loop
+                self._hold_enemies(enemies)
             spawn_timed_out = loop >= self.spawn_loop + config.SPAWN_WAIT_LOOPS
             if not (
                 loop >= self.spawn_loop + config.PRE_FIGHT_WAIT_LOOPS
@@ -108,6 +113,16 @@ class ArenaBot(BotAI):
             self.last_decision_loop = loop
             self._decide(marines, enemies, elapsed)
 
+    def _hold_enemies(self, enemies) -> None:
+        """Before the fight starts, the built-in AI otherwise drifts idle
+        Banelings/Zerglings away from their spawn point. Order each visible
+        one back to its own kind's anchor so they stay put and in frame."""
+        for e in enemies:
+            if e.type_id == UnitTypeId.BANELING:
+                e.move(self.baneling_anchor)
+            elif e.type_id == UnitTypeId.ZERGLING:
+                e.move(self.zergling_anchor)
+
     async def _spawn(self):
         self.spawn_loop = self.state.game_loop
         # toggle: reveals the map; do not combine with run_game(disable_fog=True)
@@ -115,10 +130,12 @@ class ArenaBot(BotAI):
         await self.client.debug_upgrade()
         await self.client.debug_control_enemy()
         c = Point2(config.CENTER)
+        self.baneling_anchor = c + Point2(config.BANELING_OFFSET)
+        self.zergling_anchor = c + Point2(config.ZERGLING_OFFSET)
         await self.client.debug_create_unit([
             [UnitTypeId.MARINE, config.MARINE_COUNT, c + Point2(config.MARINE_OFFSET), 1],
-            [UnitTypeId.BANELING, config.BANELING_COUNT, c + Point2(config.BANELING_OFFSET), 2],
-            [UnitTypeId.ZERGLING, config.ZERGLING_COUNT, c + Point2(config.ZERGLING_OFFSET), 2],
+            [UnitTypeId.BANELING, config.BANELING_COUNT, self.baneling_anchor, 2],
+            [UnitTypeId.ZERGLING, config.ZERGLING_COUNT, self.zergling_anchor, 2],
         ])
         await self.client.move_camera(Point2(config.CENTER))
 
