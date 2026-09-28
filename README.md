@@ -10,6 +10,12 @@ No hype. Each README reports measured results, cost, latency, and what failed.
 
 | # | Episode | Model | Video |
 |---|---------|-------|-------|
+| 001 | [SC2 combat arena](001-sc2-combat-arena/) | TypeSafe Jev | [video](https://github.com/sinakm/ai-playground/releases/tag/ep001) |
+| 002 | [SC2 squad with goal](002-sc2-squad-with-goal/) | TypeSafe Jev | [video](https://github.com/sinakm/ai-playground/releases/tag/ep002) |
+| 003 | [SC2 marine micro](003-sc2-marine-micro/) | TypeSafe Jev | [video](https://github.com/sinakm/ai-playground/releases/tag/ep003) |
+| 004 | [SC2 squad commander](004-sc2-squad-commander/) | TypeSafe Jev | [video](https://github.com/sinakm/ai-playground/releases/tag/ep004) |
+
+Start with 001; each episode builds on the previous one.
 
 ## Running an episode
 
