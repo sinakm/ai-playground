@@ -24,6 +24,7 @@ def test_build_state_summary():
         "zerglings_alive": 1,
         "squad_spread": 1.0,
         "nearest_baneling_distance": 3.0,
+        "nearest_baneling_to_squad_center": 4.0,
         "stimmed_marines": 1,
         "marines_in_splash_danger": 1,
         "seconds_left": 50.0,
@@ -53,4 +54,10 @@ def test_build_state_units():
 def test_build_state_no_banelings():
     s = build_state(M, [E[1]], fight_loop=0)
     assert s["summary"]["nearest_baneling_distance"] is None
+    assert s["summary"]["nearest_baneling_to_squad_center"] is None
     assert s["summary"]["banelings_alive"] == 0
+
+
+def test_build_state_no_marines_nearest_baneling_to_squad_center():
+    s = build_state([], E, fight_loop=0)
+    assert s["summary"]["nearest_baneling_to_squad_center"] is None

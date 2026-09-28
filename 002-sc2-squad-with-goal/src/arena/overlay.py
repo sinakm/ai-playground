@@ -134,7 +134,8 @@ def render(run_dir: Path, results_summary: Path) -> Path:
 
     title = run_dir / "title.png"
     ending = run_dir / "results.png"
-    card([card_title, "12 Marines, one squad decision every 0.18 s", subtitle]).save(title)
+    interval_line = f"12 Marines, one squad decision every {config.DECISION_INTERVAL_LOOPS / config.LOOPS_PER_SECOND:.2f} s"
+    card([card_title, interval_line, subtitle]).save(title)
     results = json.loads(results_summary.read_text(encoding="utf-8")) if results_summary.exists() else {}
     card(_results_lines(results)).save(ending)
 

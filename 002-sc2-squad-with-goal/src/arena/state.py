@@ -30,6 +30,9 @@ def build_state(marines: list[UnitView], enemies: list[UnitView], fight_loop: in
         if banes and marines
         else None
     )
+    nearest_bane_to_center = (
+        min(distance(b.x, b.y, *center) for b in banes) if banes and center else None
+    )
     marines_in_splash_danger = sum(
         1
         for m in marines
@@ -59,6 +62,9 @@ def build_state(marines: list[UnitView], enemies: list[UnitView], fight_loop: in
             "zerglings_alive": sum(1 for e in enemies if e.kind == "zergling"),
             "squad_spread": round(spread, 1),
             "nearest_baneling_distance": round(nearest_bane, 1) if nearest_bane is not None else None,
+            "nearest_baneling_to_squad_center": (
+                round(nearest_bane_to_center, 1) if nearest_bane_to_center is not None else None
+            ),
             "stimmed_marines": sum(1 for m in marines if m.stimmed),
             "marines_in_splash_danger": marines_in_splash_danger,
             "seconds_left": seconds_left,
