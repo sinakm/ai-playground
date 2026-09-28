@@ -51,16 +51,16 @@
     "runs": 20,
     "wins": 9,
     "win_rate": 0.45,
-    "mean_marines_alive": 2.5,
-    "mean_enemies_killed": 16.75,
-    "mean_fight_seconds": 16.68,
+    "mean_marines_alive": 2,
+    "mean_enemies_killed": 17.3,
+    "mean_fight_seconds": 10.69,
     "mean_score": 9,
-    "median_latency_ms": 331.1,
-    "p90_latency_ms": 408.3,
+    "median_latency_ms": 328.9,
+    "p90_latency_ms": 399.3,
     "late_decisions": 0,
     "api_errors": 0,
-    "input_tokens": 6250260,
-    "output_tokens": 421328,
-    "cost_usd": 0.262511
+    "input_tokens": 4552771,
+    "output_tokens": 306684,
+    "cost_usd": 0.191216
   }
 }
