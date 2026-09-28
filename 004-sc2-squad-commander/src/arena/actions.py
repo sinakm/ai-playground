@@ -6,7 +6,7 @@ import math
 from dataclasses import dataclass
 
 from arena import config
-from arena.state import centroid
+from arena.state import banelings_within, centroid, closest_to_banelings
 from arena.views import UnitView
 
 
@@ -171,6 +171,59 @@ def resolve_bait(actions: dict[int, str], marines: list[UnitView], enemies: list
 
     keep = min(baiters, key=lambda tag: (threat_distance(tag), tag))
     return {tag: ("kite" if a == "bait" and tag != keep else a) for tag, a in actions.items()}
+
+
+def assign_roles(actions: dict[int, str], marines: list[UnitView], enemies: list[UnitView]) -> dict[int, str]:
+    """bait_and_split roles, set in code: the Marine closest to the Banelings baits (overriding
+    its Jev choice); any other Marine that chose focus_bane or attack with a Baneling within
+    3 cells splits instead. Only Marines that have an action are touched."""
+    bait_tag = closest_to_banelings(marines, enemies)
+    if bait_tag is None:
+        return dict(actions)
+    by_id = {m.id: m for m in marines}
+    out = {}
+    for tag, a in actions.items():
+        if tag == bait_tag:
+            out[tag] = "bait"
+        elif a in ("focus_bane", "attack") and tag in by_id and banelings_within(by_id[tag], enemies) > 0:
+            out[tag] = "split"
+        else:
+            out[tag] = a
+    return out
+
+
+def cap_focus_bane(
+    actions: dict[int, str], marines: list[UnitView], enemies: list[UnitView], priority_target: int | None
+) -> dict[int, str]:
+    """At most FOCUS_BANE_CAP Marines execute focus_bane: the closest to the focus target among
+    those that chose it (ties: lowest tag). The rest attack."""
+    by_id = {m.id: m for m in marines}
+    chose = [tag for tag, a in actions.items() if a == "focus_bane" and tag in by_id]
+    if len(chose) <= config.FOCUS_BANE_CAP or not marines:
+        return dict(actions)
+    target = _focus_target(marines, enemies, priority_target)
+    if target is None:
+        return dict(actions)
+    chose.sort(key=lambda tag: (math.hypot(by_id[tag].x - target.x, by_id[tag].y - target.y), tag))
+    keep = set(chose[: config.FOCUS_BANE_CAP])
+    return {tag: ("attack" if a == "focus_bane" and tag not in keep else a) for tag, a in actions.items()}
+
+
+def execute_actions(
+    actions: dict[int, str],
+    marines: list[UnitView],
+    enemies: list[UnitView],
+    squad_plan: str | None = None,
+    priority_target: int | None = None,
+) -> dict[int, str]:
+    """The actions Marines actually execute this step: plan-driven roles (bait_and_split only),
+    then one bait per step, then the focus_bane cap."""
+    if not marines or not enemies:
+        return dict(actions)
+    if squad_plan == "bait_and_split":
+        actions = assign_roles(actions, marines, enemies)
+    actions = resolve_bait(actions, marines, enemies)
+    return cap_focus_bane(actions, marines, enemies, priority_target)
 
 
 def plan_marine_orders(

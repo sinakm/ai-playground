@@ -80,6 +80,7 @@ def test_blackboard_marine_fields_and_teammates():
     assert set(m1) == {
         "id", "hp", "stimmed", "last_action", "hp_lost_last_step",
         "nearest_baneling_distance", "nearest_marine_distance", "nearest_enemy_distance", "teammates",
+        "is_closest_to_banelings", "banelings_within_3",
     }
     assert m1["nearest_baneling_distance"] == 3.0
     assert m1["nearest_marine_distance"] == 1.0

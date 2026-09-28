@@ -14,7 +14,7 @@ from sc2.ids.unit_typeid import UnitTypeId
 from sc2.position import Point2
 
 from arena import config
-from arena.actions import plan_marine_orders, plan_orders, resolve_bait
+from arena.actions import execute_actions, plan_marine_orders, plan_orders
 from arena.jev import TRANSIENT_ERRORS
 from arena.log import DecisionLog
 from arena.state import Blackboard, build_commander_state, build_state
@@ -160,22 +160,9 @@ class ArenaBot(BotAI):
     def _decide(self, marines, enemies, elapsed: int) -> None:
         mv = [to_view(u) for u in marines]
         ev = [to_view(u) for u in enemies]
-        if getattr(self.policy, "uses_blackboard", False):
-            state = build_commander_state(mv, ev, elapsed, self.blackboard)
-        else:
-            state = build_state(mv, ev, elapsed)
-        d, error = decide_or_error(self.policy, state)
+        state, d, executed, orders = self._plan_step(mv, ev, elapsed)
         if d is None:
-            # Units keep their previous orders; the next decision step tries again.
-            self._record_api_error(error, elapsed, state, len(mv), len(ev))
-            return
-        if d.marine_actions is not None:
-            executed = resolve_bait(d.marine_actions, mv, ev)
-            orders = plan_marine_orders(executed, mv, ev, priority_target=d.priority_target)
-        else:
-            executed = {m.id: d.action for m in mv}
-            orders = plan_orders(d.action, mv, ev)
-        self.blackboard.record(mv, ev, executed)
+            return  # API error already logged; units keep their previous orders.
         enemy_by_tag = {e.tag: e for e in enemies}
         for o in orders:
             unit = marines.find_by_tag(o.unit_id)
@@ -193,6 +180,32 @@ class ArenaBot(BotAI):
                 unit.attack(Point2((o.tx, o.ty)), queue=True)
             else:
                 unit(AbilityId.EFFECT_STIM_MARINE)
+        self._log_decision(d, executed, state, elapsed, len(mv), len(ev))
+
+    def _plan_step(self, mv: list[UnitView], ev: list[UnitView], elapsed: int):
+        """SC2-free part of a decision step: state, policy call, executed actions, orders.
+        Updates the blackboard with the executed actions. On a transient API error, logs an
+        api_error record and returns (state, None, None, [])."""
+        if getattr(self.policy, "uses_blackboard", False):
+            state = build_commander_state(mv, ev, elapsed, self.blackboard)
+        else:
+            state = build_state(mv, ev, elapsed)
+        d, error = decide_or_error(self.policy, state)
+        if d is None:
+            self._record_api_error(error, elapsed, state, len(mv), len(ev))
+            return state, None, None, []
+        if d.marine_actions is not None:
+            executed = execute_actions(d.marine_actions, mv, ev, d.squad_plan, d.priority_target)
+            orders = plan_marine_orders(executed, mv, ev, priority_target=d.priority_target)
+        else:
+            executed = None
+            orders = plan_orders(d.action, mv, ev)
+        self.blackboard.record(mv, ev, executed if executed is not None else {m.id: d.action for m in mv})
+        return state, d, executed, orders
+
+    def _log_decision(
+        self, d, executed: dict[int, str] | None, state: dict, elapsed: int, marines_alive: int, enemies_alive: int
+    ) -> None:
         late = self.realtime and d.latency_ms > config.DECISION_BUDGET_MS
         self.decisions += 1
         self.late += int(late)
@@ -212,13 +225,14 @@ class ArenaBot(BotAI):
             "output_tokens": d.output_tokens,
             "late": late,
             "marine_actions": d.marine_actions,
+            "executed_actions": executed,
             "marine_confidences": d.marine_confidences,
             "squad_plan": d.squad_plan,
             "priority_target": d.priority_target,
             "commander_latency_ms": round(d.commander_latency_ms, 1) if d.commander_latency_ms is not None else None,
             "soldier_latency_ms": round(d.soldier_latency_ms, 1) if d.soldier_latency_ms is not None else None,
-            "marines_alive": len(mv),
-            "enemies_alive": len(ev),
+            "marines_alive": marines_alive,
+            "enemies_alive": enemies_alive,
             "state": state,
         })
 
@@ -239,6 +253,7 @@ class ArenaBot(BotAI):
             "output_tokens": 0,
             "late": False,
             "marine_actions": None,
+            "executed_actions": None,
             "marine_confidences": None,
             "squad_plan": None,
             "priority_target": None,

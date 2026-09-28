@@ -75,6 +75,7 @@ LOW_HP = 15
 PRIORITY_TARGET_CANDIDATES = 5
 TEAMMATES_ON_BLACKBOARD = 3
 BANELING_NEAR_TEAMMATE = 3.0
+FOCUS_BANE_CAP = 4
 
 SQUAD_PLANS = {
     "focus_banes": "banelings are within 6 cells of the squad: everyone shoots the priority baneling",
@@ -97,7 +98,7 @@ COMMANDER_TARGET_INSTRUCTIONS = (
 
 COMMANDER_MARINE_INSTRUCTIONS_TEMPLATE = (
     "Best action for the marine with id {tag}, given the squad goal: kill as many Zerg as possible "
-    "while keeping at least one Marine alive. Follow the commander's squad_plan and priority_target "
-    "unless your own situation clearly calls for something else; use your teammates on the blackboard "
+    "while keeping at least one Marine alive. Your squad_plan and role facts are in the state; follow the plan "
+    "unless your own situation clearly needs another action. Use your teammates on the blackboard "
     "to decide whether to cover an ally. Each action runs for 0.5 seconds."
 )

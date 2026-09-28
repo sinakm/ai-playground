@@ -73,12 +73,36 @@ def cumulative(records: list[dict]) -> list[dict]:
     return out
 
 
+def _action_list(record: dict) -> dict[str, str]:
+    if record.get("marine_actions") is None:
+        return config.ACTIONS
+    if record.get("policy") == "jev_marine":
+        return config.JEV_MARINE_ACTIONS
+    return config.MARINE_ACTIONS
+
+
+def _shown_actions(record: dict) -> dict:
+    """Per-Marine actions the panel shows: executed (after roles and caps) when logged, else Jev's."""
+    executed = record.get("executed_actions")
+    return executed if executed else record["marine_actions"]
+
+
+def panel_actions(record: dict) -> tuple[dict[str, float], str]:
+    """Share of Marines per action and the most common action (ties: first in action order)."""
+    shown = _shown_actions(record)
+    order = list(_action_list(record))
+    n = len(shown)
+    counts = {a: sum(1 for v in shown.values() if v == a) for a in order}
+    top = max(order, key=lambda a: (counts[a], -order.index(a)))
+    return {a: counts[a] / n for a in order}, top
+
+
 def marine_headline(record: dict) -> str:
-    """Most common Marine action and how many living Marines chose it, e.g. "KITE 7/12"."""
-    marine_actions = record["marine_actions"]
-    action = record["action"]
-    count = sum(1 for a in marine_actions.values() if a == action)
-    return f"{action.upper()} {count}/{len(marine_actions)}"
+    """Most common Marine action and how many living Marines do it, e.g. "KITE 7/12"."""
+    shown = _shown_actions(record)
+    _, action = panel_actions(record)
+    count = sum(1 for a in shown.values() if a == action)
+    return f"{action.upper()} {count}/{len(shown)}"
 
 
 def commander_header(record: dict) -> str | None:
@@ -103,7 +127,7 @@ def panel_frame(record: dict | None, totals: dict | None, header: str = "JEV DEC
         d.text((32, 100), "waiting...", font=_font(56), fill=FG)
         return img
     per_marine = record.get("marine_actions") is not None
-    big = marine_headline(record) if per_marine else record["action"].upper()
+    big = marine_headline(record) if per_marine and record["marine_actions"] else record["action"].upper()
     d.text((32, 90), big, font=_fit_font(d, big, 72, PANEL_SIZE[0] - 64), fill=CHOSEN)
     confidence = record["confidence"]
     label = "mean confidence" if per_marine else "confidence"
@@ -111,19 +135,14 @@ def panel_frame(record: dict | None, totals: dict | None, header: str = "JEV DEC
     d.text((32, 190), conf_text, font=_font(30), fill=FG)
     y = 270
     probabilities = record["probabilities"]
-    if not per_marine:
-        actions = config.ACTIONS
-    elif record.get("policy") == "jev_marine":
-        actions = config.JEV_MARINE_ACTIONS
-    else:
-        actions = config.MARINE_ACTIONS
+    actions = _action_list(record)
     row = 90 if len(actions) <= 5 else 58
+    top = record["action"]
     if per_marine and record["marine_actions"]:
-        n = len(record["marine_actions"])
-        probabilities = {a: sum(1 for v in record["marine_actions"].values() if v == a) / n for a in actions}
+        probabilities, top = panel_actions(record)
     for action in actions:
         p = (probabilities or {}).get(action, 0.0)
-        color = CHOSEN if action == record["action"] else BAR
+        color = CHOSEN if action == top else BAR
         compact = row < 90
         d.text((32, y), action, font=_font(22 if compact else 26), fill=FG)
         bar_top, bar_bottom = (y + 28, y + 46) if compact else (y + 36, y + 60)

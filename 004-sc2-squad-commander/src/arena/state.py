@@ -111,6 +111,18 @@ def _hp_lost(m: UnitView, memory: Blackboard) -> int:
     return max(0, round(memory.last_hp.get(m.id, m.hp) - m.hp))
 
 
+def closest_to_banelings(marines: list[UnitView], enemies: list[UnitView]) -> int | None:
+    """Tag of the living Marine with the smallest distance to any Baneling (ties: lowest tag)."""
+    banes = [e for e in enemies if e.kind == "baneling"]
+    if not banes or not marines:
+        return None
+    return min(marines, key=lambda m: (min(distance(m.x, m.y, b.x, b.y) for b in banes), m.id)).id
+
+
+def banelings_within(m: UnitView, enemies: list[UnitView], radius: float = config.BANELING_NEAR_TEAMMATE) -> int:
+    return sum(1 for e in enemies if e.kind == "baneling" and distance(m.x, m.y, e.x, e.y) <= radius)
+
+
 def priority_candidates(marines: list[UnitView], enemies: list[UnitView]) -> list[dict]:
     """Up to PRIORITY_TARGET_CANDIDATES Banelings nearest the squad center."""
     banes = [e for e in enemies if e.kind == "baneling"]
@@ -135,6 +147,7 @@ def build_commander_state(
     The commander's squad_plan and priority_target are added by the Jev client for call 2."""
     base = build_state(marines, enemies, fight_loop)
     banes = [e for e in enemies if e.kind == "baneling"]
+    closest = closest_to_banelings(marines, enemies)
     entries = []
     for m in marines:
         others = sorted((o for o in marines if o.id != m.id), key=lambda o: distance(m.x, m.y, o.x, o.y))
@@ -147,6 +160,8 @@ def build_commander_state(
             "nearest_baneling_distance": _nearest_distance(m, banes),
             "nearest_marine_distance": _nearest_distance(m, others),
             "nearest_enemy_distance": _nearest_distance(m, enemies),
+            "is_closest_to_banelings": m.id == closest,
+            "banelings_within_3": banelings_within(m, enemies),
             "teammates": [
                 {
                     "id": t.id,
