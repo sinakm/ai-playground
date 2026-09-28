@@ -41,7 +41,7 @@ SQUAD_INSTRUCTIONS = (
     "Score = Zerg killed if any Marine survives, otherwise 0. "
     "Running out the 60 second clock is a failure. "
     "Marines only deal damage while attacking. "
-    "Pick the squad action for the next 0.2 seconds that best serves this goal. "
+    "Pick the squad action that best serves this goal. "
     "Each action runs for 0.5 seconds before the next decision."
 )
 
