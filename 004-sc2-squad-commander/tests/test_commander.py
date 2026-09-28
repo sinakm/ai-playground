@@ -69,6 +69,8 @@ def test_blackboard_last_action_and_hp_lost():
     assert by_id[2]["hp_lost_last_step"] == 0
     assert by_id[3]["last_action"] == "stim"
     assert s["squad"]["zerg_killed_last_step"] == 1
+    mate1 = next(t for t in by_id[2]["teammates"] if t["id"] == 1)
+    assert mate1["hp_lost_last_step"] == 7 and mate1["last_action"] == "kite"
     assert s["squad"]["marines_alive"] == 3
 
 
@@ -84,7 +86,9 @@ def test_blackboard_marine_fields_and_teammates():
     # 3 nearest teammates, nearest first
     assert [t["id"] for t in m1["teammates"]] == [2, 3, 4]
     t2 = m1["teammates"][0]
-    assert set(t2) == {"id", "hp", "last_action", "baneling_within_3"}
+    assert set(t2) == {"id", "hp", "last_action", "baneling_within_3", "distance", "hp_lost_last_step"}
+    assert t2["distance"] == 1.0 and t2["hp_lost_last_step"] == 0
+    assert m1["teammates"][2]["distance"] == 10.0
     assert t2["hp"] == 10 and t2["baneling_within_3"] is True  # bane 20 at 2.0 cells from marine 2
     assert m1["teammates"][2]["baneling_within_3"] is False
 

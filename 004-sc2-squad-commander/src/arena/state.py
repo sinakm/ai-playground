@@ -107,6 +107,10 @@ def _near(u: UnitView, others: list[UnitView], radius: float) -> bool:
     return any(distance(u.x, u.y, o.x, o.y) <= radius for o in others)
 
 
+def _hp_lost(m: UnitView, memory: Blackboard) -> int:
+    return max(0, round(memory.last_hp.get(m.id, m.hp) - m.hp))
+
+
 def priority_candidates(marines: list[UnitView], enemies: list[UnitView]) -> list[dict]:
     """Up to PRIORITY_TARGET_CANDIDATES Banelings nearest the squad center."""
     banes = [e for e in enemies if e.kind == "baneling"]
@@ -139,7 +143,7 @@ def build_commander_state(
             "hp": round(m.hp),
             "stimmed": m.stimmed,
             "last_action": memory.last_actions.get(m.id),
-            "hp_lost_last_step": max(0, round(memory.last_hp.get(m.id, m.hp) - m.hp)),
+            "hp_lost_last_step": _hp_lost(m, memory),
             "nearest_baneling_distance": _nearest_distance(m, banes),
             "nearest_marine_distance": _nearest_distance(m, others),
             "nearest_enemy_distance": _nearest_distance(m, enemies),
@@ -149,6 +153,8 @@ def build_commander_state(
                     "hp": round(t.hp),
                     "last_action": memory.last_actions.get(t.id),
                     "baneling_within_3": _near(t, banes, config.BANELING_NEAR_TEAMMATE),
+                    "distance": round(distance(m.x, m.y, t.x, t.y), 1),
+                    "hp_lost_last_step": _hp_lost(t, memory),
                 }
                 for t in others[: config.TEAMMATES_ON_BLACKBOARD]
             ],
