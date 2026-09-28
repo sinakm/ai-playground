@@ -4,7 +4,7 @@ MAP_NAME = "Flat128"
 CENTER = (64.0, 64.0)
 
 MARINE_COUNT = 12
-BANELING_COUNT = 6
+BANELING_COUNT = 14
 ZERGLING_COUNT = 10
 MARINE_OFFSET = (-7.0, 0.0)
 BANELING_OFFSET = (7.0, 0.0)
@@ -32,7 +32,7 @@ ACTIONS = {
     "clump": "No banelings remain, only zerglings: group up and focus fire",
     "retreat": "Banelings are about to reach a clumped squad and marines cannot spread in time: back off while they chase",
     "attack": "No baneling is within 4 cells: attack the enemy now",
-    "stim": "Enemies are within 6 cells, no marine is stimmed and most marines have more than 20 HP: stim to fight harder",
+    "stim": "Enemies are within 8 cells and no marine is stimmed yet: stim now; stim nearly doubles damage and is worth it once per fight",
 }
 
 SQUAD_INSTRUCTIONS = (
@@ -62,7 +62,7 @@ MARINE_ACTIONS = {
     "kite": "a baneling is within 3 cells of this marine: step away from it, then keep attacking",
     "split": "another marine is within 1 cell and a baneling is within 6 cells: step away from that marine, then keep attacking",
     "attack": "no baneling is within 3 cells of this marine: attack the nearest enemy",
-    "stim": "enemies are within 6 cells, this marine is not stimmed and has more than 20 HP: stim",
+    "stim": "this marine is not stimmed, has more than 20 HP and enemies are within 8 cells: stim now; stim nearly doubles damage and pays off in almost every fight",
     "retreat": "this marine has 15 HP or less and enemies are close: fall back",
 }
 
