@@ -6,7 +6,14 @@ import time
 from dataclasses import dataclass
 
 from dotenv import find_dotenv, load_dotenv
-from typesafe_sdk import Choice, TypeSafeClient
+from typesafe_sdk import (
+    Choice,
+    TypeSafeAPIConnectionError,
+    TypeSafeAPITimeoutError,
+    TypeSafeClient,
+    TypeSafeInternalServerError,
+    TypeSafeRateLimitError,
+)
 
 from arena import config
 
@@ -14,9 +21,28 @@ PLAN_KEY = "squad_plan"
 TARGET_KEY = "priority_target"
 
 
+# Errors worth one retry: the server or network hiccuped, the request itself was fine.
+TRANSIENT_ERRORS = (
+    TypeSafeInternalServerError,
+    TypeSafeAPIConnectionError,
+    TypeSafeAPITimeoutError,
+    TypeSafeRateLimitError,
+)
+RETRY_SLEEP_S = 0.2
+
+
 def _default_client():
     load_dotenv(find_dotenv(usecwd=True))
     return TypeSafeClient()
+
+
+def _system_one(client, state: dict, questions: dict):
+    """system_one with one retry on a transient error; a second failure propagates."""
+    try:
+        return client.system_one(state=state, questions=questions)
+    except TRANSIENT_ERRORS:
+        time.sleep(RETRY_SLEEP_S)
+        return client.system_one(state=state, questions=questions)
 
 
 def marine_key(tag: int) -> str:
@@ -48,7 +74,7 @@ class JevMarineClient:
             for tag in marine_tags
         }
         start = time.perf_counter()
-        response = self._client.system_one(state=state, questions=questions)
+        response = _system_one(self._client, state, questions)
         latency_ms = (time.perf_counter() - start) * 1000
         actions, confidences = {}, {}
         for tag in marine_tags:
@@ -111,7 +137,7 @@ class JevCommanderClient:
         if options:
             questions[TARGET_KEY] = Choice(instructions=config.COMMANDER_TARGET_INSTRUCTIONS, criteria=options)
         start = time.perf_counter()
-        r1 = self._client.system_one(state=state, questions=questions)
+        r1 = _system_one(self._client, state, questions)
         commander_latency_ms = (time.perf_counter() - start) * 1000
         plan_answer = r1.answers[PLAN_KEY]
         target_answer = r1.answers.get(TARGET_KEY) if options else None
@@ -127,7 +153,7 @@ class JevCommanderClient:
             for tag in marine_tags
         }
         start = time.perf_counter()
-        r2 = self._client.system_one(state=soldier_state, questions=soldier_questions)
+        r2 = _system_one(self._client, soldier_state, soldier_questions)
         soldier_latency_ms = (time.perf_counter() - start) * 1000
         actions, confidences = {}, {}
         for tag in marine_tags:

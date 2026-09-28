@@ -15,6 +15,7 @@ from sc2.position import Point2
 
 from arena import config
 from arena.actions import plan_marine_orders, plan_orders, resolve_bait
+from arena.jev import TRANSIENT_ERRORS
 from arena.log import DecisionLog
 from arena.state import Blackboard, build_commander_state, build_state
 from arena.views import UnitView
@@ -27,6 +28,15 @@ TOTAL_ENEMIES = config.BANELING_COUNT + config.ZERGLING_COUNT
 # calling on_step for, so on_step's own "not marines" / "not enemies" branch
 # never runs. See ArenaBot.on_end.
 RESULT_MAP = {Result.Victory: "win", Result.Defeat: "loss", Result.Tie: "timeout", Result.Undecided: "timeout"}
+
+
+def decide_or_error(policy, state: dict):
+    """(decision, None), or (None, error class name) when the Jev call failed transiently
+    even after the client's retry. Any other exception propagates."""
+    try:
+        return policy.decide(state), None
+    except TRANSIENT_ERRORS as e:
+        return None, type(e).__name__
 
 
 def to_view(unit) -> UnitView:
@@ -62,6 +72,7 @@ class ArenaBot(BotAI):
         self.output_tokens = 0
         self.decisions = 0
         self.late = 0
+        self.api_errors = 0
         self.blackboard = Blackboard()
         self.finished = False
         self._closed = False
@@ -153,7 +164,11 @@ class ArenaBot(BotAI):
             state = build_commander_state(mv, ev, elapsed, self.blackboard)
         else:
             state = build_state(mv, ev, elapsed)
-        d = self.policy.decide(state)
+        d, error = decide_or_error(self.policy, state)
+        if d is None:
+            # Units keep their previous orders; the next decision step tries again.
+            self._record_api_error(error, elapsed, state, len(mv), len(ev))
+            return
         if d.marine_actions is not None:
             executed = resolve_bait(d.marine_actions, mv, ev)
             orders = plan_marine_orders(executed, mv, ev, priority_target=d.priority_target)
@@ -207,6 +222,33 @@ class ArenaBot(BotAI):
             "state": state,
         })
 
+    def _record_api_error(
+        self, error: str, elapsed: int, state: dict, marines_alive: int, enemies_alive: int
+    ) -> None:
+        self.api_errors += 1
+        self.log.write({
+            "fight_loop": elapsed,
+            "wall_time": time.time(),
+            "policy": self.policy.name,
+            "action": "api_error",
+            "error": error,
+            "probabilities": None,
+            "confidence": None,
+            "latency_ms": 0.0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "late": False,
+            "marine_actions": None,
+            "marine_confidences": None,
+            "squad_plan": None,
+            "priority_target": None,
+            "commander_latency_ms": None,
+            "soldier_latency_ms": None,
+            "marines_alive": marines_alive,
+            "enemies_alive": enemies_alive,
+            "state": state,
+        })
+
     async def _finish(
         self,
         marines_alive: int,
@@ -237,6 +279,7 @@ class ArenaBot(BotAI):
             "fight_seconds": round(elapsed / config.LOOPS_PER_SECOND, 2),
             "decisions": self.decisions,
             "late_decisions": self.late,
+            "api_errors": self.api_errors,
             "latencies_ms": [round(x, 1) for x in self.latencies],
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,

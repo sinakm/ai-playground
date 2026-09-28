@@ -54,6 +54,7 @@ def summarize(runs: list[dict]) -> dict[str, dict]:
             "median_latency_ms": percentile(latencies, 50),
             "p90_latency_ms": percentile(latencies, 90),
             "late_decisions": sum(r["late_decisions"] for r in rs),
+            "api_errors": sum(r.get("api_errors", 0) for r in rs),
             "input_tokens": tin,
             "output_tokens": tout,
             "cost_usd": cost_usd(tin, tout),
