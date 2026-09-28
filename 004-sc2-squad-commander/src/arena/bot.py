@@ -87,6 +87,8 @@ class ArenaBot(BotAI):
         self._low_confidence = 0
         self._contact = False
         self._pre_split_active = False
+        self._low_hp_marines = 0
+        self._stimmed_this_step = 0
         self.blackboard = Blackboard()
         self.finished = False
         self._closed = False
@@ -221,7 +223,9 @@ class ArenaBot(BotAI):
             orders = plan_marine_orders(executed, mv, ev, priority_target=d.priority_target)
             if d.stim_now:
                 # Stim first: it is instant and does not replace the Marine's action order.
-                orders = squad_stim_orders(mv) + orders
+                stim = squad_stim_orders(mv)
+                stats["stimmed_this_step"] = len(stim)
+                orders = stim + orders
         else:
             executed = None
             orders = plan_orders(d.action, mv, ev)
@@ -230,6 +234,8 @@ class ArenaBot(BotAI):
         self._low_confidence = stats.get("low_confidence_marines", 0)
         self._contact = stats.get("contact", in_contact(mv, ev))
         self._pre_split_active = stats.get("pre_split_active", False)
+        self._stimmed_this_step = stats.get("stimmed_this_step", 0)
+        self._low_hp_marines = sum(1 for m in mv if m.hp <= config.LOW_HP)
         return state, d, executed, orders
 
     def _log_decision(
@@ -259,6 +265,8 @@ class ArenaBot(BotAI):
             "low_confidence_marines": self._low_confidence,
             "contact": self._contact,
             "pre_split_active": self._pre_split_active,
+            "low_hp_marines": self._low_hp_marines,
+            "stimmed_this_step": self._stimmed_this_step,
             "plan_kept_low_confidence": d.plan_kept_low_confidence,
             "stim_now": d.stim_now,
             "marine_confidences": d.marine_confidences,
@@ -293,6 +301,8 @@ class ArenaBot(BotAI):
             "low_confidence_marines": 0,
             "contact": None,
             "pre_split_active": None,
+            "low_hp_marines": None,
+            "stimmed_this_step": 0,
             "plan_kept_low_confidence": None,
             "stim_now": None,
             "marine_confidences": None,

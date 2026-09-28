@@ -104,8 +104,8 @@ def test_commander_call_1_asks_stim_now_and_soldiers_cannot_stim():
     q1 = fake.calls[0][1]
     assert type(q1["stim_now"]).__name__ == "Noul"
     assert q1["stim_now"].instructions == (
-        "Should the whole squad stim now? Yes when enemies are within 8 cells, "
-        "most marines are unstimmed and above 20 HP."
+        "Should the whole squad stim now? Yes when enemies are within 8 cells "
+        "and most healthy marines (over 30 HP) are unstimmed."
     )
     assert a.stim_now is True and a.stim_now_p == 0.8
     soldier_criteria = dict(fake.calls[1][1]["marine_1"].criteria)
@@ -129,8 +129,9 @@ def test_jev_commander_decision_carries_stim_now():
     assert d.stim_now is True
 
 
-def test_squad_stim_orders_unstimmed_above_20_hp():
-    ms = [marine(1, 0, 0), marine(2, 0, 0, hp=20.0), marine(3, 0, 0, stimmed=True), marine(4, 0, 0, hp=21.0)]
+def test_squad_stim_orders_unstimmed_healthy():
+    # round 4h raised the commander threshold to COMMANDER_STIM_MIN_HP (30)
+    ms = [marine(1, 0, 0), marine(2, 0, 0, hp=30.0), marine(3, 0, 0, stimmed=True), marine(4, 0, 0, hp=31.0)]
     assert squad_stim_orders(ms) == [Order(1, "stim"), Order(4, "stim")]
 
 

@@ -77,6 +77,7 @@ TEAMMATES_ON_BLACKBOARD = 3
 BANELING_NEAR_TEAMMATE = 3.0
 FOCUS_BANE_CAP = 4
 REFLEX_KITE_DISTANCE = 2.5
+COMMANDER_STIM_MIN_HP = 30
 PRE_CONTACT_DISTANCE = 4.0
 CROWDED_DISTANCE = 1.5
 GROUP_ESCAPE_NEIGHBORS = 2
@@ -109,8 +110,8 @@ COMMANDER_PLAN_INSTRUCTIONS = (
 )
 
 STIM_NOW_INSTRUCTIONS = (
-    "Should the whole squad stim now? Yes when enemies are within 8 cells, "
-    "most marines are unstimmed and above 20 HP."
+    "Should the whole squad stim now? Yes when enemies are within 8 cells "
+    "and most healthy marines (over 30 HP) are unstimmed."
 )
 
 # Stim is the commander's call (stim_now), so soldiers under the commander cannot pick it.

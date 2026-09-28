@@ -271,6 +271,9 @@ def apply_reflex(
                 new = "retreat" if grouped else "kite"
             elif zerglings_within(m, enemies) >= config.ZERGLING_SWARM_COUNT:
                 new = "retreat_to_squad"
+            elif m.hp <= config.LOW_HP and zerglings_within(m, enemies) > 0:
+                # Low-HP reflex: a wounded Marine with a Zergling on it falls back to the squad.
+                new = "retreat_to_squad"
         out[tag] = new
         count += int(new != a)
     return out, count
@@ -299,14 +302,16 @@ def gate_low_confidence(
     min_confidence: float,
 ) -> tuple[dict[int, str], int]:
     """Replace choices Jev was unsure about (confidence < min_confidence) with a safe default:
-    kite if a Baneling is within 3 cells, else attack. Returns new actions and how many changed."""
+    kite if a Baneling is within 3 cells, else retreat at LOW_HP or less, else attack.
+    Returns new actions and how many changed."""
     by_id = {m.id: m for m in marines}
     out, count = {}, 0
     for tag, a in actions.items():
         c = confidences.get(tag)
         if c is not None and c < min_confidence and tag in by_id:
             near = banelings_within(by_id[tag], enemies, config.LOW_CONFIDENCE_KITE_DISTANCE) > 0
-            out[tag] = "kite" if near else "attack"
+            m = by_id[tag]
+            out[tag] = "kite" if near else "retreat" if m.hp <= config.LOW_HP else "attack"
             count += 1
         else:
             out[tag] = a
@@ -314,8 +319,9 @@ def gate_low_confidence(
 
 
 def squad_stim_orders(marines: list[UnitView]) -> list[Order]:
-    """Commander stim_now = yes: stim every unstimmed Marine above STIM_MIN_HP."""
-    return [Order(m.id, "stim") for m in marines if not m.stimmed and m.hp > config.STIM_MIN_HP]
+    """Commander stim_now = yes: stim every unstimmed Marine above COMMANDER_STIM_MIN_HP.
+    `stimmed` is the live Stimpack buff, so a Marine can be stimmed again once it wears off."""
+    return [Order(m.id, "stim") for m in marines if not m.stimmed and m.hp > config.COMMANDER_STIM_MIN_HP]
 
 
 def execute_actions(
