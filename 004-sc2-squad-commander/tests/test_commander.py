@@ -81,14 +81,15 @@ def test_blackboard_marine_fields_and_teammates():
     assert set(m1) == {
         "id", "hp", "stimmed", "last_action", "hp_lost_last_step",
         "nearest_baneling_distance", "nearest_marine_distance", "nearest_enemy_distance", "teammates",
-        "is_closest_to_banelings", "banelings_within_3",
+        "is_closest_to_banelings", "banelings_within_3", "zerglings_within_2",
     }
     assert m1["nearest_baneling_distance"] == 3.0
     assert m1["nearest_marine_distance"] == 1.0
     # 3 nearest teammates, nearest first
     assert [t["id"] for t in m1["teammates"]] == [2, 3, 4]
     t2 = m1["teammates"][0]
-    assert set(t2) == {"id", "hp", "last_action", "baneling_within_3", "distance", "hp_lost_last_step"}
+    assert set(t2) == {"id", "hp", "last_action", "baneling_within_3", "distance", "hp_lost_last_step",
+                      "zerglings_within_2"}
     assert t2["distance"] == 1.0 and t2["hp_lost_last_step"] == 0
     assert m1["teammates"][2]["distance"] == 10.0
     assert t2["hp"] == 10 and t2["baneling_within_3"] is True  # bane 20 at 2.0 cells from marine 2

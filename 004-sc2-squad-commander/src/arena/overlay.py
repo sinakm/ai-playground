@@ -78,6 +78,9 @@ def _action_list(record: dict) -> dict[str, str]:
         return config.ACTIONS
     if record.get("policy") == "jev_marine":
         return config.JEV_MARINE_ACTIONS
+    if record.get("policy") == "jev_commander":
+        # Stim is the commander's call (shown in the header); retreat_to_squad is a reflex.
+        return {**config.COMMANDER_MARINE_ACTIONS, **{a: "" for a in config.EXECUTED_ONLY_ACTIONS}}
     return config.MARINE_ACTIONS
 
 

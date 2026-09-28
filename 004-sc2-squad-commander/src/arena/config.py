@@ -55,7 +55,7 @@ MARINE_ACTIONS = {
     "stim": "this marine is not stimmed, has more than 20 HP and enemies are within 8 cells: stim now; stim adds about 50% damage output and pays off in almost every fight",
     "retreat": "this marine has 15 HP or less and enemies are close: fall back",
     "focus_bane": "the plan is focus_banes, or a baneling is about to reach a teammate: shoot the priority baneling",
-    "cover_ally": "a teammate within 4 cells has 15 HP or less and is under attack: shoot the enemy closest to that teammate",
+    "cover_ally": "a teammate within 4 cells has 15 HP or less and is under attack: shoot the enemy closest to that teammate and no baneling is within 3 cells of you",
     "bait": "the plan is bait_and_split and you are the marine closest to the banelings: run away from the squad to pull banelings after you",
 }
 
@@ -77,6 +77,12 @@ TEAMMATES_ON_BLACKBOARD = 3
 BANELING_NEAR_TEAMMATE = 3.0
 FOCUS_BANE_CAP = 4
 REFLEX_KITE_DISTANCE = 2.5
+ZERGLING_SWARM_COUNT = 3
+ZERGLING_SWARM_RADIUS = 2.0
+REGROUP_STEP = 2.0
+COVER_ALLY_BANELING_GUARD = 3.0
+# Executed-only actions: set by code (reflexes), never offered to Jev.
+EXECUTED_ONLY_ACTIONS = ("retreat_to_squad",)
 FOCUS_RANGE = 5.0
 
 SQUAD_PLANS = {

@@ -123,6 +123,10 @@ def banelings_within(m: UnitView, enemies: list[UnitView], radius: float = confi
     return sum(1 for e in enemies if e.kind == "baneling" and distance(m.x, m.y, e.x, e.y) <= radius)
 
 
+def zerglings_within(m: UnitView, enemies: list[UnitView], radius: float = config.ZERGLING_SWARM_RADIUS) -> int:
+    return sum(1 for e in enemies if e.kind == "zergling" and distance(m.x, m.y, e.x, e.y) <= radius)
+
+
 def priority_candidates(marines: list[UnitView], enemies: list[UnitView]) -> list[dict]:
     """Up to PRIORITY_TARGET_CANDIDATES Banelings nearest the squad center."""
     banes = [e for e in enemies if e.kind == "baneling"]
@@ -162,6 +166,7 @@ def build_commander_state(
             "nearest_enemy_distance": _nearest_distance(m, enemies),
             "is_closest_to_banelings": m.id == closest,
             "banelings_within_3": banelings_within(m, enemies),
+            "zerglings_within_2": zerglings_within(m, enemies),
             "teammates": [
                 {
                     "id": t.id,
@@ -170,6 +175,7 @@ def build_commander_state(
                     "baneling_within_3": _near(t, banes, config.BANELING_NEAR_TEAMMATE),
                     "distance": round(distance(m.x, m.y, t.x, t.y), 1),
                     "hp_lost_last_step": _hp_lost(t, memory),
+                    "zerglings_within_2": zerglings_within(t, enemies),
                 }
                 for t in others[: config.TEAMMATES_ON_BLACKBOARD]
             ],

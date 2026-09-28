@@ -6,7 +6,7 @@ import math
 from dataclasses import dataclass
 
 from arena import config
-from arena.state import banelings_within, centroid, closest_to_banelings
+from arena.state import banelings_within, centroid, closest_to_banelings, zerglings_within
 from arena.views import UnitView
 
 
@@ -146,6 +146,17 @@ def _marine_order(
     if action == "cover_ally":
         t = _cover_target(m, marines, enemies)
         return _attack_unit(m, t) if t is not None else attack
+    if action == "retreat_to_squad":
+        others = [o for o in marines if o.id != m.id]
+        if not others:
+            return attack
+        cx, cy = centroid(others)
+        d = math.hypot(cx - m.x, cy - m.y)
+        if d == 0:
+            return attack
+        step = min(config.REGROUP_STEP, d)
+        ux, uy = (cx - m.x) / d, (cy - m.y) / d
+        return Order(m.id, "kite", m.x + ux * step, m.y + uy * step, tx=ex, ty=ey)
     if action == "bait":
         target = _bait_target(m, marines, enemies)
         return Order(m.id, "move", target[0], target[1]) if target is not None else attack
@@ -221,22 +232,39 @@ def pre_split(actions: dict[int, str]) -> dict[int, str]:
 def apply_reflex(
     actions: dict[int, str], marines: list[UnitView], enemies: list[UnitView]
 ) -> tuple[dict[int, str], int]:
-    """Any Marine with a Baneling within REFLEX_KITE_DISTANCE kites, whatever it chose.
-    Returns the new actions and how many Marines the reflex changed."""
+    """Baneling reflex: any Marine with a Baneling within REFLEX_KITE_DISTANCE kites.
+    Then the Zergling swarm reflex: a Marine with at least ZERGLING_SWARM_COUNT Zerglings within
+    ZERGLING_SWARM_RADIUS (and no Baneling that close) executes retreat_to_squad.
+    Returns the new actions and how many Marines the reflexes changed."""
     banes = [e for e in enemies if e.kind == "baneling"]
     by_id = {m.id: m for m in marines}
     out, count = {}, 0
     for tag, a in actions.items():
         m = by_id.get(tag)
-        close = m is not None and any(
-            math.hypot(b.x - m.x, b.y - m.y) <= config.REFLEX_KITE_DISTANCE for b in banes
-        )
-        if close and a != "kite":
-            out[tag] = "kite"
-            count += 1
-        else:
-            out[tag] = a
+        new = a
+        if m is not None:
+            if any(math.hypot(b.x - m.x, b.y - m.y) <= config.REFLEX_KITE_DISTANCE for b in banes):
+                new = "kite"
+            elif zerglings_within(m, enemies) >= config.ZERGLING_SWARM_COUNT:
+                new = "retreat_to_squad"
+        out[tag] = new
+        count += int(new != a)
     return out, count
+
+
+def guard_cover_ally(actions: dict[int, str], marines: list[UnitView], enemies: list[UnitView]) -> dict[int, str]:
+    """A Marine with a Baneling within 3 cells cannot execute cover_ally; it kites instead."""
+    by_id = {m.id: m for m in marines}
+    return {
+        tag: (
+            "kite"
+            if a == "cover_ally"
+            and tag in by_id
+            and banelings_within(by_id[tag], enemies, config.COVER_ALLY_BANELING_GUARD) > 0
+            else a
+        )
+        for tag, a in actions.items()
+    }
 
 
 def squad_stim_orders(marines: list[UnitView]) -> list[Order]:
@@ -264,6 +292,7 @@ def execute_actions(
             actions = pre_split(actions)
         if reflex:
             actions, count = apply_reflex(actions, marines, enemies)
+        actions = guard_cover_ally(actions, marines, enemies)
         actions = resolve_bait(actions, marines, enemies)
         actions = cap_focus_bane(actions, marines, enemies, priority_target)
     else:
@@ -283,7 +312,7 @@ def plan_marine_orders(
     move a step away, then queued attack-move to the enemy centroid. focus_bane and
     cover_ally attack a specific unit (`attack_unit`); bait is a plain move."""
     for action in actions.values():
-        if action not in config.MARINE_ACTIONS:
+        if action not in config.MARINE_ACTIONS and action not in config.EXECUTED_ONLY_ACTIONS:
             raise ValueError(f"unknown marine action: {action}")
     if not marines or not enemies:
         return []
