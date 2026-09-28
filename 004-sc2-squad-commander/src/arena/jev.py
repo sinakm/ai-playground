@@ -137,10 +137,16 @@ class JevCommanderClient:
     def __init__(self, client=None):
         self._client = client if client is not None else _default_client()
 
-    def ask(self, state: dict, marine_tags: list[int], previous_plan: str | None = None) -> JevCommanderAnswer:
+    def ask(
+        self,
+        state: dict,
+        marine_tags: list[int],
+        previous_plan: str | None = None,
+        after_contact: bool = False,
+    ) -> JevCommanderAnswer:
         """`previous_plan`: when the new squad_plan answer has confidence below
         COMMANDER_MIN_CONFIDENCE and a previous plan exists, the previous plan is kept (and is
-        what the soldiers see)."""
+        what the soldiers see), except that a pre_split plan is never kept `after_contact`."""
         questions = {
             PLAN_KEY: Choice(instructions=config.COMMANDER_PLAN_INSTRUCTIONS, criteria=config.SQUAD_PLANS),
             STIM_KEY: Noul(instructions=config.STIM_NOW_INSTRUCTIONS),
@@ -159,7 +165,11 @@ class JevCommanderClient:
         target_tag = int(target_key.removeprefix("bane_")) if target_key is not None else None
 
         plan_confidence = float(plan_answer.confidence)
-        kept = previous_plan is not None and plan_confidence < config.COMMANDER_MIN_CONFIDENCE
+        kept = (
+            previous_plan is not None
+            and plan_confidence < config.COMMANDER_MIN_CONFIDENCE
+            and not (after_contact and previous_plan == "pre_split")
+        )
         plan = previous_plan if kept else plan_answer.choice
         soldier_state = {**state, PLAN_KEY: plan, TARGET_KEY: target_key}
         soldier_questions = {

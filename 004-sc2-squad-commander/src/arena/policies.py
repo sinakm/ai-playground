@@ -110,12 +110,18 @@ class JevCommander:
     def __init__(self, client: JevCommanderClient):
         self._client = client
         self._previous_plan: str | None = None
+        self._contact_seen = False
 
     def warmup(self, state: dict) -> None:
         self._client.ask({**state, "marines": [WARMUP_MARINE], "priority_candidates": []}, [WARMUP_MARINE["id"]])
 
     def decide(self, state: dict) -> Decision:
-        a = self._client.ask(state, marine_tags(state), previous_plan=self._previous_plan)
+        nearest = (state.get("summary") or {}).get("nearest_baneling_distance")
+        if nearest is not None and nearest <= config.PRE_CONTACT_DISTANCE:
+            self._contact_seen = True
+        a = self._client.ask(
+            state, marine_tags(state), previous_plan=self._previous_plan, after_contact=self._contact_seen
+        )
         self._previous_plan = a.plan
         action, shares = aggregate(a.actions)
         confs = list(a.confidences.values())

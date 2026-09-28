@@ -6,7 +6,14 @@ import math
 from dataclasses import dataclass
 
 from arena import config
-from arena.state import banelings_within, centroid, closest_to_banelings, zerglings_within
+from arena.state import (
+    banelings_within,
+    centroid,
+    closest_to_banelings,
+    in_contact,
+    marines_within,
+    zerglings_within,
+)
 from arena.views import UnitView
 
 
@@ -191,7 +198,8 @@ def resolve_bait(actions: dict[int, str], marines: list[UnitView], enemies: list
 def assign_roles(actions: dict[int, str], marines: list[UnitView], enemies: list[UnitView]) -> dict[int, str]:
     """bait_and_split roles, set in code: the Marine closest to the Banelings baits (overriding
     its Jev choice); any other Marine that chose focus_bane or attack with a Baneling within
-    3 cells splits instead. Only Marines that have an action are touched."""
+    3 cells splits instead, but only if another Marine is within CROWDED_DISTANCE.
+    Only Marines that have an action are touched."""
     bait_tag = closest_to_banelings(marines, enemies)
     if bait_tag is None:
         return dict(actions)
@@ -200,7 +208,12 @@ def assign_roles(actions: dict[int, str], marines: list[UnitView], enemies: list
     for tag, a in actions.items():
         if tag == bait_tag:
             out[tag] = "bait"
-        elif a in ("focus_bane", "attack") and tag in by_id and banelings_within(by_id[tag], enemies) > 0:
+        elif (
+            a in ("focus_bane", "attack")
+            and tag in by_id
+            and banelings_within(by_id[tag], enemies) > 0
+            and _crowded(by_id[tag], marines)
+        ):
             out[tag] = "split"
         else:
             out[tag] = a
@@ -224,9 +237,17 @@ def cap_focus_bane(
     return {tag: ("attack" if a == "focus_bane" and tag not in keep else a) for tag, a in actions.items()}
 
 
-def pre_split(actions: dict[int, str]) -> dict[int, str]:
-    """pre_split plan: Marines that chose attack or focus_bane split instead."""
-    return {tag: ("split" if a in ("attack", "focus_bane") else a) for tag, a in actions.items()}
+def _crowded(m: UnitView, marines: list[UnitView]) -> bool:
+    return marines_within(m, marines, config.CROWDED_DISTANCE) > 0
+
+
+def pre_split(actions: dict[int, str], marines: list[UnitView]) -> dict[int, str]:
+    """pre_split plan (before contact only): crowded Marines that chose attack or focus_bane split."""
+    by_id = {m.id: m for m in marines}
+    return {
+        tag: ("split" if a in ("attack", "focus_bane") and tag in by_id and _crowded(by_id[tag], marines) else a)
+        for tag, a in actions.items()
+    }
 
 
 def apply_reflex(
@@ -244,7 +265,10 @@ def apply_reflex(
         new = a
         if m is not None:
             if any(math.hypot(b.x - m.x, b.y - m.y) <= config.REFLEX_KITE_DISTANCE for b in banes):
-                new = "kite"
+                # Group escape: a Marine in a clump retreats (3 cells from the enemy centroid)
+                # instead of kiting a single step.
+                grouped = marines_within(m, marines, config.GROUP_ESCAPE_RADIUS) >= config.GROUP_ESCAPE_NEIGHBORS
+                new = "retreat" if grouped else "kite"
             elif zerglings_within(m, enemies) >= config.ZERGLING_SWARM_COUNT:
                 new = "retreat_to_squad"
         out[tag] = new
@@ -310,13 +334,15 @@ def execute_actions(
     focus_bane cap. With `min_confidence`, low-confidence choices are first replaced by a safe
     default. `stats` gets `reflex_count` and `low_confidence_marines`."""
     count = low = 0
+    contact = in_contact(marines, enemies)
+    pre_split_active = squad_plan == "pre_split" and not contact
     if marines and enemies:
         if min_confidence is not None and confidences:
             actions, low = gate_low_confidence(actions, marines, enemies, confidences, min_confidence)
         if squad_plan == "bait_and_split":
             actions = assign_roles(actions, marines, enemies)
-        elif squad_plan == "pre_split":
-            actions = pre_split(actions)
+        elif pre_split_active:
+            actions = pre_split(actions, marines)
         if reflex:
             actions, count = apply_reflex(actions, marines, enemies)
         actions = guard_cover_ally(actions, marines, enemies)
@@ -327,6 +353,8 @@ def execute_actions(
     if stats is not None:
         stats["reflex_count"] = count
         stats["low_confidence_marines"] = low
+        stats["contact"] = contact
+        stats["pre_split_active"] = pre_split_active
     return actions
 
 

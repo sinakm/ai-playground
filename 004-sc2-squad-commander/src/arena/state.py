@@ -123,6 +123,16 @@ def banelings_within(m: UnitView, enemies: list[UnitView], radius: float = confi
     return sum(1 for e in enemies if e.kind == "baneling" and distance(m.x, m.y, e.x, e.y) <= radius)
 
 
+def in_contact(marines: list[UnitView], enemies: list[UnitView]) -> bool:
+    """Contact: a Baneling within PRE_CONTACT_DISTANCE of any living Marine."""
+    banes = [e for e in enemies if e.kind == "baneling"]
+    return any(distance(m.x, m.y, b.x, b.y) <= config.PRE_CONTACT_DISTANCE for m in marines for b in banes)
+
+
+def marines_within(m: UnitView, marines: list[UnitView], radius: float) -> int:
+    return sum(1 for o in marines if o.id != m.id and distance(m.x, m.y, o.x, o.y) <= radius)
+
+
 def zerglings_within(m: UnitView, enemies: list[UnitView], radius: float = config.ZERGLING_SWARM_RADIUS) -> int:
     return sum(1 for e in enemies if e.kind == "zergling" and distance(m.x, m.y, e.x, e.y) <= radius)
 

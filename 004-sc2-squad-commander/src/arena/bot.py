@@ -17,7 +17,7 @@ from arena import config
 from arena.actions import execute_actions, plan_marine_orders, plan_orders, squad_stim_orders
 from arena.jev import TRANSIENT_ERRORS
 from arena.log import DecisionLog
-from arena.state import Blackboard, build_commander_state, build_state
+from arena.state import Blackboard, build_commander_state, build_state, in_contact
 from arena.views import UnitView
 
 KINDS = {UnitTypeId.MARINE: "marine", UnitTypeId.BANELING: "baneling", UnitTypeId.ZERGLING: "zergling"}
@@ -85,6 +85,8 @@ class ArenaBot(BotAI):
         self.api_errors = 0
         self._reflex_count = 0
         self._low_confidence = 0
+        self._contact = False
+        self._pre_split_active = False
         self.blackboard = Blackboard()
         self.finished = False
         self._closed = False
@@ -226,6 +228,8 @@ class ArenaBot(BotAI):
         self.blackboard.record(mv, ev, executed if executed is not None else {m.id: d.action for m in mv})
         self._reflex_count = stats.get("reflex_count", 0)
         self._low_confidence = stats.get("low_confidence_marines", 0)
+        self._contact = stats.get("contact", in_contact(mv, ev))
+        self._pre_split_active = stats.get("pre_split_active", False)
         return state, d, executed, orders
 
     def _log_decision(
@@ -253,6 +257,8 @@ class ArenaBot(BotAI):
             "executed_actions": executed,
             "reflex_count": self._reflex_count,
             "low_confidence_marines": self._low_confidence,
+            "contact": self._contact,
+            "pre_split_active": self._pre_split_active,
             "plan_kept_low_confidence": d.plan_kept_low_confidence,
             "stim_now": d.stim_now,
             "marine_confidences": d.marine_confidences,
@@ -285,6 +291,8 @@ class ArenaBot(BotAI):
             "executed_actions": None,
             "reflex_count": 0,
             "low_confidence_marines": 0,
+            "contact": None,
+            "pre_split_active": None,
             "plan_kept_low_confidence": None,
             "stim_now": None,
             "marine_confidences": None,

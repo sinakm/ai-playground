@@ -124,8 +124,8 @@ class ScriptedCommander:
 
 def test_bot_logs_executed_actions_and_blackboard_uses_them(tmp_path):
     # Distances kept above the 2.5-cell reflex: marine 4 is 2.6 cells from the Baneling
-    # (closest -> bait), marine 3 is 2.8 cells away (within 3 -> split).
-    ms = [marine(1, -10.0, 0.0), marine(3, 0.0, 2.8), marine(4, 2.6, 0.0)]
+    # (closest -> bait), marine 3 is 2.8 cells away (within 3, marine 2 within 1.5 -> split).
+    ms = [marine(1, -10.0, 0.0), marine(2, -1.0, 2.8), marine(3, 0.0, 2.8), marine(4, 2.6, 0.0)]
     es = [bane(20, 0.0, 0.0)]
     bot = ArenaBot(ScriptedCommander(), tmp_path, seed=0, realtime=False)
     state, d, executed, orders = bot._plan_step(ms, es, elapsed=12)
