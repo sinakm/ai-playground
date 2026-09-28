@@ -1,0 +1,47 @@
+{
+  "attack_move": {
+    "runs": 10,
+    "wins": 0,
+    "win_rate": 0.0,
+    "mean_marines_alive": 0,
+    "mean_enemies_killed": 9,
+    "mean_fight_seconds": 4.75,
+    "mean_score": 0,
+    "median_latency_ms": null,
+    "p90_latency_ms": null,
+    "late_decisions": 0,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "cost_usd": 0.0
+  },
+  "random": {
+    "runs": 10,
+    "wins": 6,
+    "win_rate": 0.6,
+    "mean_marines_alive": 2.7,
+    "mean_enemies_killed": 12.8,
+    "mean_fight_seconds": 16.08,
+    "mean_score": 9.6,
+    "median_latency_ms": null,
+    "p90_latency_ms": null,
+    "late_decisions": 0,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "cost_usd": 0.0
+  },
+  "jev_squad": {
+    "runs": 8,
+    "wins": 0,
+    "win_rate": 0.0,
+    "mean_marines_alive": 9.75,
+    "mean_enemies_killed": 2.5,
+    "mean_fight_seconds": 60.0,
+    "mean_score": 2.5,
+    "median_latency_ms": 149.8,
+    "p90_latency_ms": 202.9,
+    "late_decisions": 0,
+    "input_tokens": 5442409,
+    "output_tokens": 150528,
+    "cost_usd": 0.228581
+  }
+}
