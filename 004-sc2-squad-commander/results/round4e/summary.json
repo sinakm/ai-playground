@@ -16,13 +16,13 @@
     "cost_usd": 0.0
   },
   "random": {
-    "runs": 20,
-    "wins": 15,
-    "win_rate": 0.75,
-    "mean_marines_alive": 3,
-    "mean_enemies_killed": 18.55,
-    "mean_fight_seconds": 19.94,
-    "mean_score": 15,
+    "runs": 10,
+    "wins": 6,
+    "win_rate": 0.6,
+    "mean_marines_alive": 2.5,
+    "mean_enemies_killed": 17.9,
+    "mean_fight_seconds": 21.32,
+    "mean_score": 12,
     "median_latency_ms": null,
     "p90_latency_ms": null,
     "late_decisions": 0,
@@ -48,19 +48,19 @@
     "cost_usd": 0.04057
   },
   "jev_commander": {
-    "runs": 20,
-    "wins": 10,
-    "win_rate": 0.5,
-    "mean_marines_alive": 1.8,
-    "mean_enemies_killed": 17.2,
-    "mean_fight_seconds": 14.28,
-    "mean_score": 10,
-    "median_latency_ms": 322.7,
-    "p90_latency_ms": 401.5,
+    "runs": 10,
+    "wins": 2,
+    "win_rate": 0.2,
+    "mean_marines_alive": 0.6,
+    "mean_enemies_killed": 15.2,
+    "mean_fight_seconds": 11.48,
+    "mean_score": 4,
+    "median_latency_ms": 318.8,
+    "p90_latency_ms": 393.5,
     "late_decisions": 0,
     "api_errors": 0,
-    "input_tokens": 5417846,
-    "output_tokens": 362025,
-    "cost_usd": 0.22755
+    "input_tokens": 1998917,
+    "output_tokens": 134853,
+    "cost_usd": 0.083955
   }
 }
