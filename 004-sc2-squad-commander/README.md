@@ -15,13 +15,24 @@ Release: https://github.com/sinakm/ai-playground/releases/tag/ep004
 - `ep004-commander-4e-win.mp4` (round 4e) — win: 5 Marines alive, 20/20
   Zerg killed, 10.0 s, 0 late decisions.
 - `ep004-commander-4c-loss.mp4` (round 4c) — loss: 10 kills in 7.7 s.
+- `ep004-commander-4f-win.mp4` (round 4f) — win: 7 Marines alive, 20/20
+  Zerg killed, 9.3 s, realtime.
+- `ep004-evolution.mp4` — round cards through the series: 4c loss → 4e win
+  → 4f win. Being uploaded after review; not yet live on the release as of
+  this writing.
 
 Download form: `https://github.com/sinakm/ai-playground/releases/download/ep004/<file>`
 
 ## Results
 
 10 fights per policy per round unless noted, 60 s fight cap. Score = Zerg
-killed if any Marine survives, else 0.
+killed if any Marine survives, else 0. From round 4f on, `random` and
+`jev_commander` run 20 fights (`random`'s 20 are 4e's original 10 seeds
+plus 10 new seeds on the same code; `attack_move` and `jev_marine` are
+carried over unchanged from round 4e, since neither policy's code path
+changed in 4f–4h — their rows below are identical to round 4e's).
+`summary.json` reports means only, with no per-fight variance, so no
+confidence ranges are given below.
 
 ### Round 4a — commander + blackboard + support actions (partial run)
 
@@ -78,6 +89,41 @@ Scenario: 12 Marines vs 10 Banelings + 10 Zerglings (20 Zerg).
 | jev_marine | 10 | 0 | 0 | 0.00 | 0 | 11.40 | 17.10 | 155.50 | 198.70 | 0.04 |
 | jev_commander | 10 | 2 | 4 | 0.20 | 0.60 | 15.20 | 11.48 | 318.80 | 393.50 | 0.08 |
 
+### Round 4f — `pre_split` window widened to 12 cells; confidence gating added
+
+Scenario: 12 Marines vs 10 Banelings + 10 Zerglings (20 Zerg). `random` and
+`jev_commander` run 20 fights from this round on; `attack_move` and
+`jev_marine` are carried over unchanged from round 4e.
+
+| Policy | Runs | Wins | Score | Win rate | Marines alive | Enemies killed | Fight s | Median ms | p90 ms | Cost USD |
+|---|---|---|---|---|---|---|---|---|---|---|
+| attack_move | 10 | 0 | 0 | 0.00 | 0 | 9.20 | 3.83 | - | - | 0.00 |
+| random | 20 | 15 | 15 | 0.75 | 3 | 18.55 | 19.94 | - | - | 0.00 |
+| jev_marine | 10 | 0 | 0 | 0.00 | 0 | 11.40 | 17.10 | 155.50 | 198.70 | 0.04 |
+| jev_commander | 20 | 10 | 10 | 0.50 | 1.80 | 17.20 | 14.28 | 322.70 | 401.50 | 0.23 |
+
+### Round 4g — `pre_split` restricted to pre-contact, tighter split trigger, group escape reflex
+
+Scenario: 12 Marines vs 10 Banelings + 10 Zerglings (20 Zerg).
+
+| Policy | Runs | Wins | Score | Win rate | Marines alive | Enemies killed | Fight s | Median ms | p90 ms | Cost USD |
+|---|---|---|---|---|---|---|---|---|---|---|
+| attack_move | 10 | 0 | 0 | 0.00 | 0 | 9.20 | 3.83 | - | - | 0.00 |
+| random | 20 | 15 | 15 | 0.75 | 3 | 18.55 | 19.94 | - | - | 0.00 |
+| jev_marine | 10 | 0 | 0 | 0.00 | 0 | 11.40 | 17.10 | 155.50 | 198.70 | 0.04 |
+| jev_commander | 20 | 9 | 9 | 0.45 | 2 | 17.30 | 10.69 | 328.90 | 399.30 | 0.19 |
+
+### Round 4h — low-HP default retreat, stim gated to Marines above 30 HP with re-stim allowed
+
+Scenario: 12 Marines vs 10 Banelings + 10 Zerglings (20 Zerg).
+
+| Policy | Runs | Wins | Score | Win rate | Marines alive | Enemies killed | Fight s | Median ms | p90 ms | Cost USD |
+|---|---|---|---|---|---|---|---|---|---|---|
+| attack_move | 10 | 0 | 0 | 0.00 | 0 | 9.20 | 3.83 | - | - | 0.00 |
+| random | 20 | 15 | 15 | 0.75 | 3 | 18.55 | 19.94 | - | - | 0.00 |
+| jev_marine | 10 | 0 | 0 | 0.00 | 0 | 11.40 | 17.10 | 155.50 | 198.70 | 0.04 |
+| jev_commander | 20 | 9 | 9 | 0.45 | 2.50 | 16.75 | 16.68 | 331.10 | 408.30 | 0.26 |
+
 ## What Jev decided and why
 
 `jev_commander` calls Jev twice per step: a commander picks one of five
@@ -106,11 +152,49 @@ kiting now drags Zerglings along behind it: its win rate dropped from 5/10
 
 Round 4e added a second reflex — regroup when 3 or more Zerglings are
 within 2 cells — and blocked `cover_ally` near Banelings. `jev_commander`
-reached its best result of the series: 2/10 wins, 15.20 kills, with 158
-reflex overrides recorded across the 10 fights. Across all five rounds,
-commander kills rose 8.5 → 11.6 → 12.2 → 13.6 → 15.2 and wins went from
-0/10 to 2/10, but random (which mixes stim, split and retreat by chance)
-still killed more on average (17.9 in round 4e).
+reached its best win rate up to that point: 2/10 wins, 15.20 kills, with
+158 reflex overrides recorded across the 10 fights.
+
+Round 4f widened the `pre_split` plan's trigger window (Banelings within 12
+cells instead of a tighter range) and added confidence gating: a Marine
+whose action-choice confidence fell below 0.5 fell back to a coded default
+(kite if a Baneling was within 3 cells, otherwise attack) instead of acting
+on a low-confidence answer, and the commander kept its previous plan rather
+than switch on a low-confidence plan choice. Measured across the round, 36%
+of Marine decisions fell back to the coded default, 4% were reflex
+overrides, and the commander kept its existing plan in 67% of steps. Wins
+jumped to 10/20 (50%), the best win rate of the series, and kills rose to
+17.20 — this round is also where evaluation moved to 20 fights for
+`random` and `jev_commander`.
+
+Round 4g tightened two of 4f's changes: `pre_split`'s code effect now only
+applies before contact (no Baneling within 4 cells of any Marine), and the
+split-away trigger only fires when another Marine is within 1.5 cells
+(tighter than before). A group-escape reflex was added: retreat when a
+Baneling is within 2.5 cells and 2 or more Marines are within 2 cells of
+each other. This fixed the early fight — commander Marines were ahead of
+random at the 3–4 second mark — but the squad lost ground late: surviving
+Marines averaged 15 HP at the end of the fight versus random's 34 HP. Wins
+slipped to 9/20 (45%).
+
+Round 4h added a default retreat for any Marine at or below 15 HP, gated
+stim to Marines above 30 HP (with re-stimming allowed, where earlier rounds
+stimmed once per fight), and added a reflex against Zerglings for low-HP
+Marines. More Marines were alive at the 6–8 second mark than in random's
+fights, but wins stayed flat at 9/20 (45%) and surviving-Marine HP was
+still low (12 HP average versus random's 34).
+
+Across rounds 4f–4h, `jev_commander`'s win rate plateaued at 10/20, 9/20,
+9/20 against random's steady 15/20 in the same 20-fight sets. The gap looks
+like HP efficiency, not kill count: `jev_commander` matches or beats random
+on kills in most rounds (16.75–17.30 vs random's 18.55) but its Marines
+finish fights far lower on HP (12–15 vs random's 34). The working
+hypothesis is that random's constant switching between move and attack
+actions accidentally resembles stutter-step micro, which the current action
+set has no equivalent for; a dedicated `stutter` action is the next lever,
+planned for a future episode. Across all eight rounds (4a–4h), commander
+kills moved 8.5 → 11.6 → 12.2 → 13.6 → 15.2 → 17.2 → 17.3 → 16.75 and wins
+went from 0/10 to a peak of 10/20 in 4f before settling at 9/20.
 
 ## Cost and latency
 
@@ -120,13 +204,36 @@ reported latency is the sum of its two calls (commander + soldiers); in
 round 4e that was median 318.8 ms, p90 393.5 ms — inside budget.
 `jev_marine`'s single call stayed lower: median 155.5 ms, p90 198.7 ms.
 `late_decisions` is 0 across every round in `summary.json`. 10 fights of
-`jev_commander` cost $0.06–$0.11 depending on the round; `jev_marine` cost
+`jev_commander` cost $0.06–$0.11 in rounds 4a–4e; `jev_marine` cost
 $0.04–$0.06.
+
+Rounds 4f–4h evaluate `jev_commander` over 20 fights instead of 10, so cost
+scales accordingly: $0.23 (4f), $0.19 (4g), and $0.26 for round 4h's 20
+fights (median 331 ms, p90 408 ms — both still inside the 535.7 ms budget).
+`jev_marine` and `attack_move` are unchanged from round 4e in this span, so
+their cost and latency figures repeat.
 
 ## Limits and failures
 
-- `jev_commander` never out-killed random on raw kills in any round; its
-  best win rate (2/10, round 4e) still trails random's typical 6/10.
+- `jev_commander`'s win rate plateaued at 10/20, 9/20, 9/20 across rounds
+  4f–4h against random's steady 15/20 in the same 20-fight sets, even
+  though commander kills are close to or ahead of random's in those rounds.
+  Surviving Marines finish fights at much lower HP than random's (12–15 HP
+  vs 34 HP in 4g and 4h), which looks like the real gap: an HP-efficiency
+  problem, not a kill-count problem. The current hypothesis is that random
+  benefits from its constant move/attack switching acting like stutter-step
+  micro, which nothing in the current action set replicates.
+- From round 4f on, confidence gating and reflexes mean roughly 40% of
+  Marine actions in a fight are not Jev's direct choice: round 4f measured
+  36% of Marine decisions falling back to a coded default (low
+  action-choice confidence) plus 4% reflex overrides, on top of the
+  kite/regroup reflexes already present from 4d–4e. Read the per-round
+  action mixes as "Jev's plan plus a growing layer of code defaults and
+  reflexes," not Jev acting alone.
+- The realtime showcase videos do not reproduce the paused-mode evaluation
+  numbers exactly — `ep004-commander-4f-win.mp4` is one realtime fight
+  (7 Marines alive, 20/20 killed, 9.3 s), which is a best-case outcome, not
+  the round's 50% win rate.
 - Round 4a's `bait` plan was untestable: the scripted Zerg targeted the
   squad's center, so no Marine's "closest to the Banelings" fact was ever
   true in a way that made baiting happen. This was a scenario bug, not a
@@ -150,7 +257,9 @@ $0.04–$0.06.
   killed fewer Zerg than plain `attack_move` in round 4a until role facts
   and code-side roles existed to back the extra choices.
 - Small sample: 10 fights per policy per round (1 for `attack_move` in
-  round 4a), one map, one seed range.
+  round 4a; `random` and `jev_commander` move to 20 fights from round 4f),
+  one map, one seed range, and `summary.json` gives only means, so no
+  variance or confidence interval is available for any of these numbers.
 - Audio capture in recorded runs (`soundcard`) is Windows-only.
 - The scripted Zerg opponent is driven directly by the bot via
   `debug_control_enemy`, not the game's own AI.
