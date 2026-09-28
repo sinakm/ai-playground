@@ -57,7 +57,7 @@ def test_reflex_does_not_count_marines_already_kiting():
 
 def test_pre_split_plan_text():
     assert config.SQUAD_PLANS["pre_split"] == (
-        "banelings are 4 to 8 cells from the squad and marines are clumped: spread out before they arrive"
+        "banelings are within 12 cells of the squad and marines are clumped: spread out before they arrive"
     )
 
 

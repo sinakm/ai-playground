@@ -84,6 +84,7 @@ class ArenaBot(BotAI):
         self.late = 0
         self.api_errors = 0
         self._reflex_count = 0
+        self._low_confidence = 0
         self.blackboard = Blackboard()
         self.finished = False
         self._closed = False
@@ -211,7 +212,9 @@ class ArenaBot(BotAI):
         stats: dict = {}
         if d.marine_actions is not None:
             executed = execute_actions(
-                d.marine_actions, mv, ev, d.squad_plan, d.priority_target, reflex=reflex, stats=stats
+                d.marine_actions, mv, ev, d.squad_plan, d.priority_target, reflex=reflex, stats=stats,
+                confidences=d.marine_confidences if reflex else None,
+                min_confidence=config.SOLDIER_MIN_CONFIDENCE if reflex else None,
             )
             orders = plan_marine_orders(executed, mv, ev, priority_target=d.priority_target)
             if d.stim_now:
@@ -222,6 +225,7 @@ class ArenaBot(BotAI):
             orders = plan_orders(d.action, mv, ev)
         self.blackboard.record(mv, ev, executed if executed is not None else {m.id: d.action for m in mv})
         self._reflex_count = stats.get("reflex_count", 0)
+        self._low_confidence = stats.get("low_confidence_marines", 0)
         return state, d, executed, orders
 
     def _log_decision(
@@ -248,6 +252,8 @@ class ArenaBot(BotAI):
             "marine_actions": d.marine_actions,
             "executed_actions": executed,
             "reflex_count": self._reflex_count,
+            "low_confidence_marines": self._low_confidence,
+            "plan_kept_low_confidence": d.plan_kept_low_confidence,
             "stim_now": d.stim_now,
             "marine_confidences": d.marine_confidences,
             "squad_plan": d.squad_plan,
@@ -278,6 +284,8 @@ class ArenaBot(BotAI):
             "marine_actions": None,
             "executed_actions": None,
             "reflex_count": 0,
+            "low_confidence_marines": 0,
+            "plan_kept_low_confidence": None,
             "stim_now": None,
             "marine_confidences": None,
             "squad_plan": None,

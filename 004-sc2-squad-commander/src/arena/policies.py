@@ -26,6 +26,7 @@ class Decision:
     commander_latency_ms: float | None = None
     soldier_latency_ms: float | None = None
     stim_now: bool | None = None
+    plan_kept_low_confidence: bool | None = None
 
 
 def marine_tags(state: dict) -> list[int]:
@@ -108,12 +109,14 @@ class JevCommander:
 
     def __init__(self, client: JevCommanderClient):
         self._client = client
+        self._previous_plan: str | None = None
 
     def warmup(self, state: dict) -> None:
         self._client.ask({**state, "marines": [WARMUP_MARINE], "priority_candidates": []}, [WARMUP_MARINE["id"]])
 
     def decide(self, state: dict) -> Decision:
-        a = self._client.ask(state, marine_tags(state))
+        a = self._client.ask(state, marine_tags(state), previous_plan=self._previous_plan)
+        self._previous_plan = a.plan
         action, shares = aggregate(a.actions)
         confs = list(a.confidences.values())
         return Decision(
@@ -131,6 +134,7 @@ class JevCommander:
             commander_latency_ms=a.commander_latency_ms,
             soldier_latency_ms=a.soldier_latency_ms,
             stim_now=a.stim_now,
+            plan_kept_low_confidence=a.plan_kept_low_confidence,
         )
 
 

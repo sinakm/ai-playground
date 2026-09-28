@@ -113,6 +113,8 @@ def priority_target_options(candidates: list[dict]) -> dict[str, str]:
 class JevCommanderAnswer:
     plan: str
     plan_confidence: float
+    plan_raw: str
+    plan_kept_low_confidence: bool
     stim_now: bool
     stim_now_p: float
     target_tag: int | None
@@ -135,7 +137,10 @@ class JevCommanderClient:
     def __init__(self, client=None):
         self._client = client if client is not None else _default_client()
 
-    def ask(self, state: dict, marine_tags: list[int]) -> JevCommanderAnswer:
+    def ask(self, state: dict, marine_tags: list[int], previous_plan: str | None = None) -> JevCommanderAnswer:
+        """`previous_plan`: when the new squad_plan answer has confidence below
+        COMMANDER_MIN_CONFIDENCE and a previous plan exists, the previous plan is kept (and is
+        what the soldiers see)."""
         questions = {
             PLAN_KEY: Choice(instructions=config.COMMANDER_PLAN_INSTRUCTIONS, criteria=config.SQUAD_PLANS),
             STIM_KEY: Noul(instructions=config.STIM_NOW_INSTRUCTIONS),
@@ -153,7 +158,10 @@ class JevCommanderClient:
         target_key = target_answer.choice if target_answer is not None and target_answer.choice in options else None
         target_tag = int(target_key.removeprefix("bane_")) if target_key is not None else None
 
-        soldier_state = {**state, PLAN_KEY: plan_answer.choice, TARGET_KEY: target_key}
+        plan_confidence = float(plan_answer.confidence)
+        kept = previous_plan is not None and plan_confidence < config.COMMANDER_MIN_CONFIDENCE
+        plan = previous_plan if kept else plan_answer.choice
+        soldier_state = {**state, PLAN_KEY: plan, TARGET_KEY: target_key}
         soldier_questions = {
             marine_key(tag): Choice(
                 instructions=config.COMMANDER_MARINE_INSTRUCTIONS_TEMPLATE.format(tag=tag),
@@ -172,8 +180,10 @@ class JevCommanderClient:
             actions[tag] = answer.choice
             confidences[tag] = float(answer.confidence)
         return JevCommanderAnswer(
-            plan=plan_answer.choice,
-            plan_confidence=float(plan_answer.confidence),
+            plan=plan,
+            plan_confidence=plan_confidence,
+            plan_raw=plan_answer.choice,
+            plan_kept_low_confidence=kept,
             stim_now=stim_now_p >= 0.5,
             stim_now_p=stim_now_p,
             target_tag=target_tag,

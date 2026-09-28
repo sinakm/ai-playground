@@ -267,6 +267,28 @@ def guard_cover_ally(actions: dict[int, str], marines: list[UnitView], enemies: 
     }
 
 
+def gate_low_confidence(
+    actions: dict[int, str],
+    marines: list[UnitView],
+    enemies: list[UnitView],
+    confidences: dict[int, float],
+    min_confidence: float,
+) -> tuple[dict[int, str], int]:
+    """Replace choices Jev was unsure about (confidence < min_confidence) with a safe default:
+    kite if a Baneling is within 3 cells, else attack. Returns new actions and how many changed."""
+    by_id = {m.id: m for m in marines}
+    out, count = {}, 0
+    for tag, a in actions.items():
+        c = confidences.get(tag)
+        if c is not None and c < min_confidence and tag in by_id:
+            near = banelings_within(by_id[tag], enemies, config.LOW_CONFIDENCE_KITE_DISTANCE) > 0
+            out[tag] = "kite" if near else "attack"
+            count += 1
+        else:
+            out[tag] = a
+    return out, count
+
+
 def squad_stim_orders(marines: list[UnitView]) -> list[Order]:
     """Commander stim_now = yes: stim every unstimmed Marine above STIM_MIN_HP."""
     return [Order(m.id, "stim") for m in marines if not m.stimmed and m.hp > config.STIM_MIN_HP]
@@ -280,12 +302,17 @@ def execute_actions(
     priority_target: int | None = None,
     reflex: bool = False,
     stats: dict | None = None,
+    confidences: dict[int, float] | None = None,
+    min_confidence: float | None = None,
 ) -> dict[int, str]:
     """The actions Marines actually execute this step: plan-driven roles (bait_and_split,
     pre_split), then the reflex kite (commander only), then one bait per step, then the
-    focus_bane cap. `stats["reflex_count"]` gets how many Marines the reflex changed."""
-    count = 0
+    focus_bane cap. With `min_confidence`, low-confidence choices are first replaced by a safe
+    default. `stats` gets `reflex_count` and `low_confidence_marines`."""
+    count = low = 0
     if marines and enemies:
+        if min_confidence is not None and confidences:
+            actions, low = gate_low_confidence(actions, marines, enemies, confidences, min_confidence)
         if squad_plan == "bait_and_split":
             actions = assign_roles(actions, marines, enemies)
         elif squad_plan == "pre_split":
@@ -299,6 +326,7 @@ def execute_actions(
         actions = dict(actions)
     if stats is not None:
         stats["reflex_count"] = count
+        stats["low_confidence_marines"] = low
     return actions
 
 

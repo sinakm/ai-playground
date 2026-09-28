@@ -37,7 +37,7 @@ def test_commander_config():
     assert config.SQUAD_PLANS == {
         "focus_banes": "banelings are within 6 cells of the squad: everyone shoots the priority baneling",
         "bait_and_split": "banelings are grouped and heading at a clumped squad: one marine baits, the rest spread",
-        "pre_split": "banelings are 4 to 8 cells from the squad and marines are clumped: spread out before they arrive",
+        "pre_split": "banelings are within 12 cells of the squad and marines are clumped: spread out before they arrive",
         "hold_and_shoot": "no baneling within 6 cells: hold ground and shoot the nearest enemy",
         "fall_back": "more than half the squad is under 20 HP and banelings are close: pull back together",
     }
