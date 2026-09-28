@@ -30,19 +30,19 @@
     "cost_usd": 0.0
   },
   "jev_squad": {
-    "runs": 2,
-    "wins": 0,
-    "win_rate": 0.0,
-    "mean_marines_alive": 4.5,
-    "mean_enemies_killed": 9,
-    "mean_fight_seconds": 60.0,
-    "mean_score": 9,
-    "median_latency_ms": 154.6,
-    "p90_latency_ms": 211.6,
+    "runs": 10,
+    "wins": 1,
+    "win_rate": 0.1,
+    "mean_marines_alive": 4.6,
+    "mean_enemies_killed": 11.7,
+    "mean_fight_seconds": 56.22,
+    "mean_score": 11.7,
+    "median_latency_ms": 158.6,
+    "p90_latency_ms": 321.8,
     "late_decisions": 0,
-    "input_tokens": 494570,
-    "output_tokens": 12544,
-    "cost_usd": 0.020772
+    "input_tokens": 2209400,
+    "output_tokens": 58815,
+    "cost_usd": 0.092795
   },
   "jev_marine": {
     "runs": 10,
