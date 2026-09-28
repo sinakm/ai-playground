@@ -1,0 +1,150 @@
+"""Thin wrappers over the TypeSafe SDK: one question per Marine, or a commander call then a Marine call."""
+
+from __future__ import annotations
+
+import time
+from dataclasses import dataclass
+
+from dotenv import find_dotenv, load_dotenv
+from typesafe_sdk import Choice, TypeSafeClient
+
+from arena import config
+
+PLAN_KEY = "squad_plan"
+TARGET_KEY = "priority_target"
+
+
+def _default_client():
+    load_dotenv(find_dotenv(usecwd=True))
+    return TypeSafeClient()
+
+
+def marine_key(tag: int) -> str:
+    return f"marine_{tag}"
+
+
+@dataclass(frozen=True)
+class JevMarineAnswer:
+    actions: dict[int, str]
+    confidences: dict[int, float]
+    latency_ms: float
+    input_tokens: int
+    output_tokens: int
+    model: str
+
+
+class JevMarineClient:
+    """One system_one call per decision, one Choice per living Marine keyed `marine_<tag>`.
+    The questions dict is rebuilt every call because Marines die."""
+
+    def __init__(self, client=None):
+        self._client = client if client is not None else _default_client()
+
+    def ask(self, state: dict, marine_tags: list[int]) -> JevMarineAnswer:
+        questions = {
+            marine_key(tag): Choice(
+                instructions=config.MARINE_INSTRUCTIONS_TEMPLATE.format(tag=tag), criteria=config.JEV_MARINE_ACTIONS
+            )
+            for tag in marine_tags
+        }
+        start = time.perf_counter()
+        response = self._client.system_one(state=state, questions=questions)
+        latency_ms = (time.perf_counter() - start) * 1000
+        actions, confidences = {}, {}
+        for tag in marine_tags:
+            answer = response.answers.get(marine_key(tag))
+            if answer is None:
+                continue
+            actions[tag] = answer.choice
+            confidences[tag] = float(answer.confidence)
+        return JevMarineAnswer(
+            actions=actions,
+            confidences=confidences,
+            latency_ms=latency_ms,
+            input_tokens=response.usage.input_tokens,
+            output_tokens=response.usage.output_tokens,
+            model=response.model,
+        )
+
+
+def bane_key(tag: int) -> str:
+    return f"bane_{tag}"
+
+
+def priority_target_options(candidates: list[dict]) -> dict[str, str]:
+    return {
+        bane_key(c["id"]): (
+            f"baneling {c['id']}: {c['distance_to_squad_center']} cells from squad center, "
+            f"nearest marine {c['nearest_marine_distance']} cells"
+        )
+        for c in candidates
+    }
+
+
+@dataclass(frozen=True)
+class JevCommanderAnswer:
+    plan: str
+    plan_confidence: float
+    target_tag: int | None
+    actions: dict[int, str]
+    confidences: dict[int, float]
+    commander_latency_ms: float
+    soldier_latency_ms: float
+    input_tokens: int
+    output_tokens: int
+    model: str
+
+
+class JevCommanderClient:
+    """Two sequential system_one calls per decision.
+    Call 1 (commander): `squad_plan`, plus `priority_target` over `bane_<tag>` options built
+    from state["priority_candidates"] (omitted when no Baneling is alive).
+    Call 2 (soldiers): one `marine_<tag>` question per living Marine, with the plan and
+    target added to the state."""
+
+    def __init__(self, client=None):
+        self._client = client if client is not None else _default_client()
+
+    def ask(self, state: dict, marine_tags: list[int]) -> JevCommanderAnswer:
+        questions = {PLAN_KEY: Choice(instructions=config.COMMANDER_PLAN_INSTRUCTIONS, criteria=config.SQUAD_PLANS)}
+        options = priority_target_options(state.get("priority_candidates") or [])
+        if options:
+            questions[TARGET_KEY] = Choice(instructions=config.COMMANDER_TARGET_INSTRUCTIONS, criteria=options)
+        start = time.perf_counter()
+        r1 = self._client.system_one(state=state, questions=questions)
+        commander_latency_ms = (time.perf_counter() - start) * 1000
+        plan_answer = r1.answers[PLAN_KEY]
+        target_answer = r1.answers.get(TARGET_KEY) if options else None
+        target_key = target_answer.choice if target_answer is not None and target_answer.choice in options else None
+        target_tag = int(target_key.removeprefix("bane_")) if target_key is not None else None
+
+        soldier_state = {**state, PLAN_KEY: plan_answer.choice, TARGET_KEY: target_key}
+        soldier_questions = {
+            marine_key(tag): Choice(
+                instructions=config.COMMANDER_MARINE_INSTRUCTIONS_TEMPLATE.format(tag=tag),
+                criteria=config.MARINE_ACTIONS,
+            )
+            for tag in marine_tags
+        }
+        start = time.perf_counter()
+        r2 = self._client.system_one(state=soldier_state, questions=soldier_questions)
+        soldier_latency_ms = (time.perf_counter() - start) * 1000
+        actions, confidences = {}, {}
+        for tag in marine_tags:
+            answer = r2.answers.get(marine_key(tag))
+            if answer is None:
+                continue
+            actions[tag] = answer.choice
+            confidences[tag] = float(answer.confidence)
+        return JevCommanderAnswer(
+            plan=plan_answer.choice,
+            plan_confidence=float(plan_answer.confidence),
+            target_tag=target_tag,
+            actions=actions,
+            confidences=confidences,
+            commander_latency_ms=commander_latency_ms,
+            soldier_latency_ms=soldier_latency_ms,
+            input_tokens=r1.usage.input_tokens + r2.usage.input_tokens,
+            output_tokens=r1.usage.output_tokens + r2.usage.output_tokens,
+            model=r2.model,
+        )
