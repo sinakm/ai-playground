@@ -108,7 +108,9 @@ def marine_headline(record: dict) -> str:
 def commander_header(record: dict) -> str | None:
     """Panel header for a commander record, e.g. "COMMANDER: FOCUS_BANES"."""
     plan = record.get("squad_plan")
-    return f"COMMANDER: {plan.upper()}" if plan else None
+    if not plan:
+        return None
+    return f"COMMANDER: {plan.upper()}" + (" \u00b7 STIM" if record.get("stim_now") else "")
 
 
 def _fit_font(d: ImageDraw.ImageDraw, text: str, size: int, max_width: int, min_size: int = 24):

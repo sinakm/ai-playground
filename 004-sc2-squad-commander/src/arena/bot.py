@@ -14,7 +14,7 @@ from sc2.ids.unit_typeid import UnitTypeId
 from sc2.position import Point2
 
 from arena import config
-from arena.actions import execute_actions, plan_marine_orders, plan_orders
+from arena.actions import execute_actions, plan_marine_orders, plan_orders, squad_stim_orders
 from arena.jev import TRANSIENT_ERRORS
 from arena.log import DecisionLog
 from arena.state import Blackboard, build_commander_state, build_state
@@ -37,6 +37,16 @@ def decide_or_error(policy, state: dict):
         return policy.decide(state), None
     except TRANSIENT_ERRORS as e:
         return None, type(e).__name__
+
+
+def zerg_targets(marines: list[UnitView], enemies: list[UnitView]) -> dict[int, int]:
+    """Each Zerg's target: the nearest living Marine (ties: lowest tag)."""
+    if not marines:
+        return {}
+    return {
+        e.id: min(marines, key=lambda m: ((m.x - e.x) ** 2 + (m.y - e.y) ** 2, m.id)).id
+        for e in enemies
+    }
 
 
 def to_view(unit) -> UnitView:
@@ -73,6 +83,7 @@ class ArenaBot(BotAI):
         self.decisions = 0
         self.late = 0
         self.api_errors = 0
+        self._reflex_count = 0
         self.blackboard = Blackboard()
         self.finished = False
         self._closed = False
@@ -125,8 +136,10 @@ class ArenaBot(BotAI):
             )
         if self.last_enemy_order_loop is None or loop - self.last_enemy_order_loop >= config.ENEMY_REORDER_INTERVAL_LOOPS:
             self.last_enemy_order_loop = loop
+            targets = zerg_targets([to_view(m) for m in marines], [to_view(e) for e in enemies])
             for e in enemies:
-                e.attack(marines.center)
+                target = marines.find_by_tag(targets[e.tag])
+                e.attack(target if target is not None else marines.center)
         if self.last_decision_loop is None or loop - self.last_decision_loop >= config.DECISION_INTERVAL_LOOPS:
             self.last_decision_loop = loop
             self._decide(marines, enemies, elapsed)
@@ -194,13 +207,21 @@ class ArenaBot(BotAI):
         if d is None:
             self._record_api_error(error, elapsed, state, len(mv), len(ev))
             return state, None, None, []
+        reflex = bool(getattr(self.policy, "uses_blackboard", False))
+        stats: dict = {}
         if d.marine_actions is not None:
-            executed = execute_actions(d.marine_actions, mv, ev, d.squad_plan, d.priority_target)
+            executed = execute_actions(
+                d.marine_actions, mv, ev, d.squad_plan, d.priority_target, reflex=reflex, stats=stats
+            )
             orders = plan_marine_orders(executed, mv, ev, priority_target=d.priority_target)
+            if d.stim_now:
+                # Stim first: it is instant and does not replace the Marine's action order.
+                orders = squad_stim_orders(mv) + orders
         else:
             executed = None
             orders = plan_orders(d.action, mv, ev)
         self.blackboard.record(mv, ev, executed if executed is not None else {m.id: d.action for m in mv})
+        self._reflex_count = stats.get("reflex_count", 0)
         return state, d, executed, orders
 
     def _log_decision(
@@ -226,6 +247,8 @@ class ArenaBot(BotAI):
             "late": late,
             "marine_actions": d.marine_actions,
             "executed_actions": executed,
+            "reflex_count": self._reflex_count,
+            "stim_now": d.stim_now,
             "marine_confidences": d.marine_confidences,
             "squad_plan": d.squad_plan,
             "priority_target": d.priority_target,
@@ -254,6 +277,8 @@ class ArenaBot(BotAI):
             "late": False,
             "marine_actions": None,
             "executed_actions": None,
+            "reflex_count": 0,
+            "stim_now": None,
             "marine_confidences": None,
             "squad_plan": None,
             "priority_target": None,

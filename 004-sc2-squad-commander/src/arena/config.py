@@ -32,7 +32,7 @@ ACTIONS = {
     "clump": "No banelings remain, only zerglings: group up and focus fire",
     "retreat": "Banelings are about to reach a clumped squad and marines cannot spread in time: back off while they chase",
     "attack": "No baneling is within 4 cells: attack the enemy now",
-    "stim": "Enemies are within 8 cells and no marine is stimmed yet: stim now; stim nearly doubles damage and is worth it once per fight",
+    "stim": "Enemies are within 8 cells and no marine is stimmed yet: stim now; stim adds about 50% damage output and is worth it once per fight",
 }
 
 STATE_RULES = (
@@ -52,7 +52,7 @@ MARINE_ACTIONS = {
     "kite": "a baneling is within 3 cells of this marine: step away from it, then keep attacking",
     "split": "another marine is within 1 cell and a baneling is within 6 cells: step away from that marine, then keep attacking",
     "attack": "no baneling is within 3 cells of this marine: attack the nearest enemy",
-    "stim": "this marine is not stimmed, has more than 20 HP and enemies are within 8 cells: stim now; stim nearly doubles damage and pays off in almost every fight",
+    "stim": "this marine is not stimmed, has more than 20 HP and enemies are within 8 cells: stim now; stim adds about 50% damage output and pays off in almost every fight",
     "retreat": "this marine has 15 HP or less and enemies are close: fall back",
     "focus_bane": "the plan is focus_banes, or a baneling is about to reach a teammate: shoot the priority baneling",
     "cover_ally": "a teammate within 4 cells has 15 HP or less and is under attack: shoot the enemy closest to that teammate",
@@ -76,10 +76,13 @@ PRIORITY_TARGET_CANDIDATES = 5
 TEAMMATES_ON_BLACKBOARD = 3
 BANELING_NEAR_TEAMMATE = 3.0
 FOCUS_BANE_CAP = 4
+REFLEX_KITE_DISTANCE = 2.5
+FOCUS_RANGE = 5.0
 
 SQUAD_PLANS = {
     "focus_banes": "banelings are within 6 cells of the squad: everyone shoots the priority baneling",
     "bait_and_split": "banelings are grouped and heading at a clumped squad: one marine baits, the rest spread",
+    "pre_split": "banelings are 4 to 8 cells from the squad and marines are clumped: spread out before they arrive",
     "hold_and_shoot": "no baneling within 6 cells: hold ground and shoot the nearest enemy",
     "fall_back": "more than half the squad is under 20 HP and banelings are close: pull back together",
 }
@@ -90,6 +93,14 @@ COMMANDER_PLAN_INSTRUCTIONS = (
     "Score = Zerg killed if any Marine survives, otherwise 0. "
     "Pick the squad plan for the next 0.5 seconds; every Marine will see it."
 )
+
+STIM_NOW_INSTRUCTIONS = (
+    "Should the whole squad stim now? Yes when enemies are within 8 cells, "
+    "most marines are unstimmed and above 20 HP."
+)
+
+# Stim is the commander's call (stim_now), so soldiers under the commander cannot pick it.
+COMMANDER_MARINE_ACTIONS = {a: t for a, t in MARINE_ACTIONS.items() if a != "stim"}
 
 COMMANDER_TARGET_INSTRUCTIONS = (
     "Pick the baneling the squad should kill first: the one that threatens the most marines soonest. "

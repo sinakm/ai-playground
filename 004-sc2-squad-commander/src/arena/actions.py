@@ -137,8 +137,12 @@ def _marine_order(
         d = config.MARINE_RETREAT_DISTANCE
         return Order(m.id, "move", m.x + ux * d, m.y + uy * d)
     if action == "focus_bane":
+        # Range guard: only shoot the focus Baneling when it is already in range; walking to
+        # it means walking into Banelings.
         t = _focus_target(marines, enemies, priority_target)
-        return _attack_unit(m, t) if t is not None else attack
+        if t is None or math.hypot(t.x - m.x, t.y - m.y) > config.FOCUS_RANGE + 1e-9:
+            return attack
+        return _attack_unit(m, t)
     if action == "cover_ally":
         t = _cover_target(m, marines, enemies)
         return _attack_unit(m, t) if t is not None else attack
@@ -209,21 +213,64 @@ def cap_focus_bane(
     return {tag: ("attack" if a == "focus_bane" and tag not in keep else a) for tag, a in actions.items()}
 
 
+def pre_split(actions: dict[int, str]) -> dict[int, str]:
+    """pre_split plan: Marines that chose attack or focus_bane split instead."""
+    return {tag: ("split" if a in ("attack", "focus_bane") else a) for tag, a in actions.items()}
+
+
+def apply_reflex(
+    actions: dict[int, str], marines: list[UnitView], enemies: list[UnitView]
+) -> tuple[dict[int, str], int]:
+    """Any Marine with a Baneling within REFLEX_KITE_DISTANCE kites, whatever it chose.
+    Returns the new actions and how many Marines the reflex changed."""
+    banes = [e for e in enemies if e.kind == "baneling"]
+    by_id = {m.id: m for m in marines}
+    out, count = {}, 0
+    for tag, a in actions.items():
+        m = by_id.get(tag)
+        close = m is not None and any(
+            math.hypot(b.x - m.x, b.y - m.y) <= config.REFLEX_KITE_DISTANCE for b in banes
+        )
+        if close and a != "kite":
+            out[tag] = "kite"
+            count += 1
+        else:
+            out[tag] = a
+    return out, count
+
+
+def squad_stim_orders(marines: list[UnitView]) -> list[Order]:
+    """Commander stim_now = yes: stim every unstimmed Marine above STIM_MIN_HP."""
+    return [Order(m.id, "stim") for m in marines if not m.stimmed and m.hp > config.STIM_MIN_HP]
+
+
 def execute_actions(
     actions: dict[int, str],
     marines: list[UnitView],
     enemies: list[UnitView],
     squad_plan: str | None = None,
     priority_target: int | None = None,
+    reflex: bool = False,
+    stats: dict | None = None,
 ) -> dict[int, str]:
-    """The actions Marines actually execute this step: plan-driven roles (bait_and_split only),
-    then one bait per step, then the focus_bane cap."""
-    if not marines or not enemies:
-        return dict(actions)
-    if squad_plan == "bait_and_split":
-        actions = assign_roles(actions, marines, enemies)
-    actions = resolve_bait(actions, marines, enemies)
-    return cap_focus_bane(actions, marines, enemies, priority_target)
+    """The actions Marines actually execute this step: plan-driven roles (bait_and_split,
+    pre_split), then the reflex kite (commander only), then one bait per step, then the
+    focus_bane cap. `stats["reflex_count"]` gets how many Marines the reflex changed."""
+    count = 0
+    if marines and enemies:
+        if squad_plan == "bait_and_split":
+            actions = assign_roles(actions, marines, enemies)
+        elif squad_plan == "pre_split":
+            actions = pre_split(actions)
+        if reflex:
+            actions, count = apply_reflex(actions, marines, enemies)
+        actions = resolve_bait(actions, marines, enemies)
+        actions = cap_focus_bane(actions, marines, enemies, priority_target)
+    else:
+        actions = dict(actions)
+    if stats is not None:
+        stats["reflex_count"] = count
+    return actions
 
 
 def plan_marine_orders(

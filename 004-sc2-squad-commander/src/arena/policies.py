@@ -25,6 +25,7 @@ class Decision:
     priority_target: int | None = None
     commander_latency_ms: float | None = None
     soldier_latency_ms: float | None = None
+    stim_now: bool | None = None
 
 
 def marine_tags(state: dict) -> list[int]:
@@ -129,6 +130,7 @@ class JevCommander:
             priority_target=a.target_tag,
             commander_latency_ms=a.commander_latency_ms,
             soldier_latency_ms=a.soldier_latency_ms,
+            stim_now=a.stim_now,
         )
 
 

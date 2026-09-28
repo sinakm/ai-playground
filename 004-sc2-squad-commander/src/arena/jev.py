@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from dotenv import find_dotenv, load_dotenv
 from typesafe_sdk import (
     Choice,
+    Noul,
     TypeSafeAPIConnectionError,
     TypeSafeAPITimeoutError,
     TypeSafeClient,
@@ -19,6 +20,7 @@ from arena import config
 
 PLAN_KEY = "squad_plan"
 TARGET_KEY = "priority_target"
+STIM_KEY = "stim_now"
 
 
 # Errors worth one retry: the server or network hiccuped, the request itself was fine.
@@ -111,6 +113,8 @@ def priority_target_options(candidates: list[dict]) -> dict[str, str]:
 class JevCommanderAnswer:
     plan: str
     plan_confidence: float
+    stim_now: bool
+    stim_now_p: float
     target_tag: int | None
     actions: dict[int, str]
     confidences: dict[int, float]
@@ -132,7 +136,10 @@ class JevCommanderClient:
         self._client = client if client is not None else _default_client()
 
     def ask(self, state: dict, marine_tags: list[int]) -> JevCommanderAnswer:
-        questions = {PLAN_KEY: Choice(instructions=config.COMMANDER_PLAN_INSTRUCTIONS, criteria=config.SQUAD_PLANS)}
+        questions = {
+            PLAN_KEY: Choice(instructions=config.COMMANDER_PLAN_INSTRUCTIONS, criteria=config.SQUAD_PLANS),
+            STIM_KEY: Noul(instructions=config.STIM_NOW_INSTRUCTIONS),
+        }
         options = priority_target_options(state.get("priority_candidates") or [])
         if options:
             questions[TARGET_KEY] = Choice(instructions=config.COMMANDER_TARGET_INSTRUCTIONS, criteria=options)
@@ -140,6 +147,8 @@ class JevCommanderClient:
         r1 = _system_one(self._client, state, questions)
         commander_latency_ms = (time.perf_counter() - start) * 1000
         plan_answer = r1.answers[PLAN_KEY]
+        stim_answer = r1.answers.get(STIM_KEY)
+        stim_now_p = float(stim_answer.noul) if stim_answer is not None else 0.0
         target_answer = r1.answers.get(TARGET_KEY) if options else None
         target_key = target_answer.choice if target_answer is not None and target_answer.choice in options else None
         target_tag = int(target_key.removeprefix("bane_")) if target_key is not None else None
@@ -148,7 +157,7 @@ class JevCommanderClient:
         soldier_questions = {
             marine_key(tag): Choice(
                 instructions=config.COMMANDER_MARINE_INSTRUCTIONS_TEMPLATE.format(tag=tag),
-                criteria=config.MARINE_ACTIONS,
+                criteria=config.COMMANDER_MARINE_ACTIONS,
             )
             for tag in marine_tags
         }
@@ -165,6 +174,8 @@ class JevCommanderClient:
         return JevCommanderAnswer(
             plan=plan_answer.choice,
             plan_confidence=float(plan_answer.confidence),
+            stim_now=stim_now_p >= 0.5,
+            stim_now_p=stim_now_p,
             target_tag=target_tag,
             actions=actions,
             confidences=confidences,

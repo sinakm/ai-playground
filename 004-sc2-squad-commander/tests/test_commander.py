@@ -37,6 +37,7 @@ def test_commander_config():
     assert config.SQUAD_PLANS == {
         "focus_banes": "banelings are within 6 cells of the squad: everyone shoots the priority baneling",
         "bait_and_split": "banelings are grouped and heading at a clumped squad: one marine baits, the rest spread",
+        "pre_split": "banelings are 4 to 8 cells from the squad and marines are clumped: spread out before they arrive",
         "hold_and_shoot": "no baneling within 6 cells: hold ground and shoot the nearest enemy",
         "fall_back": "more than half the squad is under 20 HP and banelings are close: pull back together",
     }
@@ -142,15 +143,20 @@ def test_cover_ally_without_teammate_in_radius_attacks_nearest():
 
 
 def test_focus_bane_uses_priority_target():
-    [o] = plan_marine_orders({1: "focus_bane"}, SQ, EN, priority_target=21)
-    assert o == Order(1, "attack_unit", -6.0, 0.0, target_id=21)
+    # priority target within FOCUS_RANGE of the marine (the range guard is tested in test_round4d)
+    ms = [marine(1, 0.0, 0.0), marine(2, 2.0, 0.0)]
+    es = [bane(20, 4.0, 0.0), bane(21, -3.0, 0.0)]
+    [o] = plan_marine_orders({1: "focus_bane"}, ms, es, priority_target=21)
+    assert o == Order(1, "attack_unit", -3.0, 0.0, target_id=21)
 
 
 def test_focus_bane_falls_back_to_bane_nearest_squad_center():
-    # squad center (6.5, 5.0): bane 20 at (8,0) is nearer than bane 21 at (-6,0)
-    [o] = plan_marine_orders({1: "focus_bane"}, SQ, EN, priority_target=999)
+    # squad center (1, 0): bane 20 at (4,0) is nearer than bane 21 at (-3.5,0)
+    ms = [marine(1, 0.0, 0.0), marine(2, 2.0, 0.0)]
+    es = [bane(20, 4.0, 0.0), bane(21, -3.5, 0.0)]
+    [o] = plan_marine_orders({1: "focus_bane"}, ms, es, priority_target=999)
     assert o.target_id == 20
-    [o] = plan_marine_orders({1: "focus_bane"}, SQ, EN)
+    [o] = plan_marine_orders({1: "focus_bane"}, ms, es)
     assert o.target_id == 20
 
 
@@ -203,14 +209,14 @@ def test_commander_client_two_sequential_calls_plan_in_second_state():
     a = JevCommanderClient(client=fake).ask(commander_state(), [1, 2, 3, 4])
     assert len(fake.calls) == 2 and fake.max_in_flight == 1
     s1, q1 = fake.calls[0]
-    assert set(q1) == {"squad_plan", "priority_target"}
+    assert set(q1) == {"squad_plan", "priority_target", "stim_now"}
     assert dict(q1["squad_plan"].criteria) == config.SQUAD_PLANS
     assert "squad_plan" not in s1
     s2, q2 = fake.calls[1]
     assert s2["squad_plan"] == "focus_banes"
     assert s2["priority_target"] == "bane_21"
     assert list(q2) == ["marine_1", "marine_2", "marine_3", "marine_4"]
-    assert dict(q2["marine_1"].criteria) == config.MARINE_ACTIONS
+    assert dict(q2["marine_1"].criteria) == config.COMMANDER_MARINE_ACTIONS
     assert q2["marine_1"].instructions == config.COMMANDER_MARINE_INSTRUCTIONS_TEMPLATE.format(tag=1)
     assert a.plan == "focus_banes" and a.target_tag == 21
     assert a.actions == {1: "focus_bane", 2: "focus_bane", 3: "focus_bane", 4: "focus_bane"}
@@ -232,7 +238,7 @@ def test_commander_without_banelings_omits_priority_target():
     fake = FakeCommander(plan="hold_and_shoot", marine_choice="attack")
     s = build_commander_state(M4, [ling(30, 5.0, 5.0)], fight_loop=0, memory=Blackboard())
     a = JevCommanderClient(client=fake).ask(s, [1, 2])
-    assert set(fake.calls[0][1]) == {"squad_plan"}
+    assert set(fake.calls[0][1]) == {"squad_plan", "stim_now"}
     assert fake.calls[1][0]["priority_target"] is None
     assert a.target_tag is None and a.plan == "hold_and_shoot"
 

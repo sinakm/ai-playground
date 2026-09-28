@@ -32,7 +32,7 @@ class Flaky:
         answers = {}
         for k, q in questions.items():
             choice = "hold_and_shoot" if k == "squad_plan" else next(iter(q.criteria)) if k == "priority_target" else "attack"
-            answers[k] = SimpleNamespace(choice=choice, probabilities={choice: 1.0}, confidence=0.9)
+            answers[k] = SimpleNamespace(choice=choice, probabilities={choice: 1.0}, confidence=0.9, noul=0.0)
         return SimpleNamespace(answers=answers, usage=SimpleNamespace(input_tokens=10, output_tokens=1), model="m")
 
 

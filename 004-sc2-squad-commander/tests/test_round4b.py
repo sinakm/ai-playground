@@ -93,7 +93,7 @@ def test_focus_bane_cap_keeps_four_closest_to_priority_target():
 
 def test_focus_bane_cap_orders():
     ms = [marine(i, float(i), 0.0) for i in range(1, 8)]
-    es = [bane(20, 10.0, 0.0)]
+    es = [bane(20, 8.0, 0.0)]  # marines 4..7 within FOCUS_RANGE of it
     ex = execute_actions({i: "focus_bane" for i in range(1, 8)}, ms, es, priority_target=20)
     kinds = [o.kind for o in plan_marine_orders(ex, ms, es, priority_target=20)]
     assert kinds.count("attack_unit") == 4 and kinds.count("attack") == 3
@@ -123,16 +123,20 @@ class ScriptedCommander:
 
 
 def test_bot_logs_executed_actions_and_blackboard_uses_them(tmp_path):
+    # Distances kept above the 2.5-cell reflex: marine 4 is 2.6 cells from the Baneling
+    # (closest -> bait), marine 3 is 2.8 cells away (within 3 -> split).
+    ms = [marine(1, -10.0, 0.0), marine(3, 0.0, 2.8), marine(4, 2.6, 0.0)]
+    es = [bane(20, 0.0, 0.0)]
     bot = ArenaBot(ScriptedCommander(), tmp_path, seed=0, realtime=False)
-    state, d, executed, orders = bot._plan_step(MS, ES, elapsed=12)
+    state, d, executed, orders = bot._plan_step(ms, es, elapsed=12)
     assert executed[4] == "bait" and executed[3] == "split"
-    bot._log_decision(d, executed, state, elapsed=12, marines_alive=len(MS), enemies_alive=len(ES))
+    bot._log_decision(d, executed, state, elapsed=12, marines_alive=len(ms), enemies_alive=len(es))
     bot.close()
     [rec] = [json.loads(line) for line in (tmp_path / "decisions.jsonl").read_text().splitlines()]
     assert rec["marine_actions"]["4"] == "attack"
     assert rec["executed_actions"]["4"] == "bait" and rec["executed_actions"]["3"] == "split"
     assert bot.blackboard.last_actions[4] == "bait"
-    nxt = build_commander_state(MS, ES, fight_loop=24, memory=bot.blackboard)
+    nxt = build_commander_state(ms, es, fight_loop=24, memory=bot.blackboard)
     assert {m["id"]: m["last_action"] for m in nxt["marines"]}[4] == "bait"
 
 
