@@ -16,6 +16,7 @@ from sc2.position import Point2
 from arena import config
 from arena.actions import (
     Order,
+    apply_reflex,
     execute_actions,
     plan_marine_orders,
     plan_orders,
@@ -24,6 +25,7 @@ from arena.actions import (
 )
 from arena.jev import TRANSIENT_ERRORS
 from arena.log import DecisionLog
+from arena.scheduler import DecisionScheduler
 from arena.state import Blackboard, build_commander_state, build_state, in_contact
 from arena.views import UnitView
 
@@ -50,6 +52,21 @@ def stutter_tags(executed: dict[int, str] | None) -> set[int]:
     """Marines that stutter until the next decision: those whose executed action is `stutter`.
     A squad-level decision (no per-Marine actions) clears the set."""
     return {tag for tag, a in (executed or {}).items() if a == "stutter"}
+
+
+def step_reflex(
+    base: dict[int, str], current: dict[int, str], marines: list[UnitView], enemies: list[UnitView]
+) -> tuple[dict[int, str], dict[int, str]]:
+    """Per-step reflex pass (realtime only): the reflexes applied to the actions of the last
+    applied decision (`base`), against the units seen now. Returns the new executed-action map
+    and the living Marines whose action differs from what they execute now (`current`).
+    A Marine whose reflex no longer fires goes back to its base action."""
+    if not base or not marines or not enemies:
+        return dict(current), {}
+    alive = {m.id for m in marines}
+    desired, _ = apply_reflex({t: a for t, a in base.items() if t in alive}, marines, enemies)
+    changed = {t: a for t, a in desired.items() if current.get(t) != a}
+    return {**current, **desired}, changed
 
 
 def zerg_targets(marines: list[UnitView], enemies: list[UnitView]) -> dict[int, int]:
@@ -109,6 +126,15 @@ class ArenaBot(BotAI):
         self.stuttering: set[int] = set()
         self.stutter_steps = 0
         self.blackboard = Blackboard()
+        # Realtime only: background decisions and the per-step reflex pass.
+        self.scheduler: DecisionScheduler | None = (
+            DecisionScheduler(lambda snap: decide_or_error(self.policy, snap["state"])) if realtime else None
+        )
+        self.apply_delays: list[int] = []
+        self.step_reflex_changes = 0
+        self._base_actions: dict[int, str] = {}
+        self._current_actions: dict[int, str] = {}
+        self._priority_target: int | None = None
         self.finished = False
         self._closed = False
 
@@ -164,11 +190,83 @@ class ArenaBot(BotAI):
             for e in enemies:
                 target = marines.find_by_tag(targets[e.tag])
                 e.attack(target if target is not None else marines.center)
-        if self.last_decision_loop is None or loop - self.last_decision_loop >= config.DECISION_INTERVAL_LOOPS:
+        # Two decision paths on purpose. Paused (evaluation): the game waits for the policy, so
+        # the synchronous call costs no game time and results stay comparable across rounds.
+        # Realtime (recordings): the game does not wait; a synchronous Jev call (~350 ms) would
+        # block every on_step, stopping stutter orders and reflexes for most of each decision
+        # window. So realtime runs the policy on a worker thread and applies the answer to the
+        # units present when it arrives, while stutter and reflexes keep running every step.
+        if self.realtime:
+            self._realtime_decisions(marines, enemies, loop, elapsed)
+        elif self.last_decision_loop is None or loop - self.last_decision_loop >= config.DECISION_INTERVAL_LOOPS:
             self.last_decision_loop = loop
             self._decide(marines, enemies, elapsed)
         if self.stuttering:
             self._stutter_step(marines, enemies)
+
+    def _realtime_decisions(self, marines, enemies, loop: int, elapsed: int) -> None:
+        """Realtime: apply a finished background decision, start the next one at a decision
+        step (skipped while one is in flight), then run the per-step reflex pass."""
+        done = self.scheduler.poll()
+        if done is not None:
+            self._apply_background(done.snapshot, done.result, marines, enemies, elapsed)
+        if self.last_decision_loop is None or loop - self.last_decision_loop >= config.DECISION_INTERVAL_LOOPS:
+            self.last_decision_loop = loop
+            self._start_background([to_view(u) for u in marines], [to_view(u) for u in enemies], elapsed)
+        if getattr(self.policy, "uses_blackboard", False) and self._base_actions:
+            self._reflex_step(marines, enemies)
+
+    def _start_background(self, mv: list[UnitView], ev: list[UnitView], elapsed: int) -> bool:
+        """SC2-free: snapshot the state now and hand it to the scheduler."""
+        state = self._build_decision_state(mv, ev, elapsed)
+        return self.scheduler.maybe_start(
+            {"state": state, "elapsed": elapsed, "marines_alive": len(mv), "enemies_alive": len(ev)}
+        )
+
+    def _apply_background(self, snapshot: dict, result, marines, enemies, elapsed: int) -> None:
+        mv = [to_view(u) for u in marines]
+        ev = [to_view(u) for u in enemies]
+        _, orders = self._apply_result(snapshot, result, mv, ev, elapsed)
+        self._issue_orders(orders, marines, enemies)
+
+    def _apply_result(self, snapshot: dict, result, mv: list[UnitView], ev: list[UnitView], elapsed: int):
+        """SC2-free part of applying a background decision: plan against the CURRENT units
+        (`mv`, `ev`), log the record with requested/applied loops. On an API error, log it and
+        keep the previous orders. Returns (decision or None, orders)."""
+        d, error = result
+        requested = snapshot["elapsed"]
+        if d is None:
+            self._record_api_error(
+                error, requested, snapshot["state"], snapshot["marines_alive"], snapshot["enemies_alive"],
+                requested_loop=requested, applied_loop=elapsed,
+            )
+            return None, []
+        executed, orders = self._apply_plan(d, mv, ev)
+        self.apply_delays.append(elapsed - requested)
+        self._log_decision(
+            d, executed, snapshot["state"], elapsed, len(mv), len(ev), requested_loop=requested, applied_loop=elapsed
+        )
+        return d, orders
+
+    def _reflex_step(self, marines, enemies) -> None:
+        mv = [to_view(u) for u in marines]
+        ev = [to_view(u) for u in enemies]
+        self._issue_orders(self._reflex_orders(mv, ev), marines, enemies)
+
+    def _reflex_orders(self, mv: list[UnitView], ev: list[UnitView]) -> list[Order]:
+        """SC2-free part of the per-step reflex pass: update the executed-action map and the
+        stutter set; return orders only for Marines whose action changed."""
+        desired, changed = step_reflex(self._base_actions, self._current_actions, mv, ev)
+        if not changed:
+            return []
+        self._current_actions = desired
+        self.step_reflex_changes += len(changed)
+        for tag, a in changed.items():
+            if a == "stutter":
+                self.stuttering.add(tag)
+            else:
+                self.stuttering.discard(tag)
+        return plan_marine_orders(changed, mv, ev, priority_target=self._priority_target)
 
     def _stutter_step(self, marines, enemies) -> None:
         """Every bot step: one stutter order per living stuttering Marine (weapon_cooldown == 0
@@ -230,6 +328,12 @@ class ArenaBot(BotAI):
         state, d, executed, orders = self._plan_step(mv, ev, elapsed)
         if d is None:
             return  # API error already logged; units keep their previous orders.
+        self._issue_orders(orders, marines, enemies)
+        self._log_decision(d, executed, state, elapsed, len(mv), len(ev))
+
+    def _issue_orders(self, orders: list[Order], marines, enemies) -> None:
+        if not orders:
+            return
         enemy_by_tag = {e.tag: e for e in enemies}
         for o in orders:
             unit = marines.find_by_tag(o.unit_id)
@@ -247,20 +351,27 @@ class ArenaBot(BotAI):
                 unit.attack(Point2((o.tx, o.ty)), queue=True)
             else:
                 unit(AbilityId.EFFECT_STIM_MARINE)
-        self._log_decision(d, executed, state, elapsed, len(mv), len(ev))
+
+    def _build_decision_state(self, mv: list[UnitView], ev: list[UnitView], elapsed: int) -> dict:
+        if getattr(self.policy, "uses_blackboard", False):
+            return build_commander_state(mv, ev, elapsed, self.blackboard)
+        return build_state(mv, ev, elapsed)
 
     def _plan_step(self, mv: list[UnitView], ev: list[UnitView], elapsed: int):
         """SC2-free part of a decision step: state, policy call, executed actions, orders.
         Updates the blackboard with the executed actions. On a transient API error, logs an
         api_error record and returns (state, None, None, [])."""
-        if getattr(self.policy, "uses_blackboard", False):
-            state = build_commander_state(mv, ev, elapsed, self.blackboard)
-        else:
-            state = build_state(mv, ev, elapsed)
+        state = self._build_decision_state(mv, ev, elapsed)
         d, error = decide_or_error(self.policy, state)
         if d is None:
             self._record_api_error(error, elapsed, state, len(mv), len(ev))
             return state, None, None, []
+        executed, orders = self._apply_plan(d, mv, ev)
+        return state, d, executed, orders
+
+    def _apply_plan(self, d, mv: list[UnitView], ev: list[UnitView]):
+        """Executed actions and orders for decision `d` against the units `mv`, `ev`. Updates
+        the blackboard, the stutter set and the executed-action map. Returns (executed, orders)."""
         reflex = bool(getattr(self.policy, "uses_blackboard", False))
         stats: dict = {}
         if d.marine_actions is not None:
@@ -287,12 +398,27 @@ class ArenaBot(BotAI):
         self._stimmed_this_step = stats.get("stimmed_this_step", 0)
         self._low_hp_marines = sum(1 for m in mv if m.hp <= config.LOW_HP)
         self.stuttering = stutter_tags(executed)
-        return state, d, executed, orders
+        self._base_actions = dict(executed or {})
+        self._current_actions = dict(executed or {})
+        self._priority_target = d.priority_target
+        return executed, orders
 
     def _log_decision(
-        self, d, executed: dict[int, str] | None, state: dict, elapsed: int, marines_alive: int, enemies_alive: int
+        self,
+        d,
+        executed: dict[int, str] | None,
+        state: dict,
+        elapsed: int,
+        marines_alive: int,
+        enemies_alive: int,
+        requested_loop: int | None = None,
+        applied_loop: int | None = None,
     ) -> None:
-        late = self.realtime and d.latency_ms > config.DECISION_BUDGET_MS
+        delay = applied_loop - requested_loop if requested_loop is not None and applied_loop is not None else None
+        if delay is not None:
+            late = delay > config.DECISION_INTERVAL_LOOPS
+        else:
+            late = self.realtime and d.latency_ms > config.DECISION_BUDGET_MS
         self.decisions += 1
         self.late += int(late)
         self.input_tokens += d.input_tokens
@@ -328,12 +454,23 @@ class ArenaBot(BotAI):
             "soldier_latency_ms": round(d.soldier_latency_ms, 1) if d.soldier_latency_ms is not None else None,
             "marines_alive": marines_alive,
             "enemies_alive": enemies_alive,
+            "requested_loop": requested_loop,
+            "applied_loop": applied_loop,
+            "apply_delay_loops": delay,
             "state": state,
         })
 
     def _record_api_error(
-        self, error: str, elapsed: int, state: dict, marines_alive: int, enemies_alive: int
+        self,
+        error: str,
+        elapsed: int,
+        state: dict,
+        marines_alive: int,
+        enemies_alive: int,
+        requested_loop: int | None = None,
+        applied_loop: int | None = None,
     ) -> None:
+        delay = applied_loop - requested_loop if requested_loop is not None and applied_loop is not None else None
         self.api_errors += 1
         self.log.write({
             "fight_loop": elapsed,
@@ -365,6 +502,9 @@ class ArenaBot(BotAI):
             "soldier_latency_ms": None,
             "marines_alive": marines_alive,
             "enemies_alive": enemies_alive,
+            "requested_loop": requested_loop,
+            "applied_loop": applied_loop,
+            "apply_delay_loops": delay,
             "state": state,
         })
 
@@ -378,6 +518,7 @@ class ArenaBot(BotAI):
         hp_alive_sum: float = 0.0,
     ) -> None:
         self.finished = True
+        self._close_scheduler()
         if result_override is not None:
             result = result_override
         elif enemies_alive == 0 and marines_alive > 0:
@@ -404,6 +545,11 @@ class ArenaBot(BotAI):
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
             "stutter_steps": self.stutter_steps,
+            "skipped_decisions": self.scheduler.skipped if self.scheduler is not None else 0,
+            "mean_apply_delay_loops": (
+                round(sum(self.apply_delays) / len(self.apply_delays), 2) if self.realtime and self.apply_delays else None
+            ),
+            "step_reflex_changes": self.step_reflex_changes,
             "hp_alive_sum": round(hp_alive_sum, 1),
             "record_start_wall": getattr(self.recorder, "start_wall", None),
         }
@@ -418,9 +564,18 @@ class ArenaBot(BotAI):
         if self._closed:
             return
         self._closed = True
+        self._close_scheduler()
         self.log.close()
         if self.recorder is not None:
             self.recorder.stop()
+
+    def _close_scheduler(self) -> None:
+        """Drop any in-flight background decision without waiting; never raises."""
+        if self.scheduler is not None:
+            try:
+                self.scheduler.close()
+            except Exception:
+                pass
 
     async def on_end(self, game_result: Result):
         if not self.finished:
