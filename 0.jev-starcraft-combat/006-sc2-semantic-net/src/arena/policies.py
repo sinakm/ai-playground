@@ -7,7 +7,7 @@ from collections import Counter
 from dataclasses import dataclass
 
 from arena import config
-from arena.jev import JevCommanderClient
+from arena.jev import JevCommanderClient, JevSemanticClient
 
 
 @dataclass(frozen=True)
@@ -27,6 +27,7 @@ class Decision:
     soldier_latency_ms: float | None = None
     stim_now: bool | None = None
     plan_kept_low_confidence: bool | None = None
+    semantic_activations: dict[str, float] | None = None
 
 
 def marine_tags(state: dict) -> list[int]:
@@ -140,6 +141,45 @@ class JevCommander:
         )
 
 
+
+class JevSemanticNet:
+    """Shared semantic perceptions -> independent Marine actions; no discrete squad plan."""
+
+    name = "jev_semantic_net"
+    uses_blackboard = True
+    stutter_default = True
+    soldier_actions = config.COMMANDER_STUTTER_MARINE_ACTIONS
+
+    def __init__(self, client: JevSemanticClient):
+        self._client = client
+
+    def warmup(self, state: dict) -> None:
+        self._client.ask(
+            {**state, "marines": [WARMUP_MARINE], "priority_candidates": []},
+            [WARMUP_MARINE["id"]],
+            soldier_actions=self.soldier_actions,
+        )
+
+    def decide(self, state: dict) -> Decision:
+        a = self._client.ask(state, marine_tags(state), soldier_actions=self.soldier_actions)
+        action, shares = aggregate(a.actions)
+        confs = list(a.confidences.values())
+        return Decision(
+            action=action,
+            probabilities=shares,
+            confidence=sum(confs) / len(confs) if confs else None,
+            latency_ms=a.perception_latency_ms + a.soldier_latency_ms,
+            input_tokens=a.input_tokens,
+            output_tokens=a.output_tokens,
+            model=a.model,
+            marine_actions=a.actions,
+            marine_confidences=a.confidences,
+            commander_latency_ms=a.perception_latency_ms,
+            soldier_latency_ms=a.soldier_latency_ms,
+            semantic_activations=a.activations,
+        )
+
+
 class JevCommanderStutter(JevCommander):
     """Round 4h plus `stutter` as a soldier option. Low-confidence default: stutter when an enemy
     is within STUTTER_ENEMY_RADIUS and no Baneling within LOW_CONFIDENCE_KITE_DISTANCE."""
@@ -149,7 +189,7 @@ class JevCommanderStutter(JevCommander):
     soldier_actions = config.COMMANDER_STUTTER_MARINE_ACTIONS
 
 
-POLICY_NAMES = ("attack_move", "random", "stutter_all", "jev_commander", "jev_commander_stutter")
+POLICY_NAMES = ("attack_move", "random", "stutter_all", "jev_commander", "jev_commander_stutter", "jev_semantic_net")
 
 
 def make_policy(name: str, seed: int, jev_client=None):
@@ -163,4 +203,6 @@ def make_policy(name: str, seed: int, jev_client=None):
         return JevCommander(jev_client if jev_client is not None else JevCommanderClient())
     if name == "jev_commander_stutter":
         return JevCommanderStutter(jev_client if jev_client is not None else JevCommanderClient())
+    if name == "jev_semantic_net":
+        return JevSemanticNet(jev_client if jev_client is not None else JevSemanticClient())
     raise ValueError(f"unknown policy: {name}")
