@@ -40,9 +40,7 @@ whether the architecture is useful.
 - jev_commander_stutter
 - jev_semantic_net
 
-The cleanest A/B is jev_commander_stutter vs jev_semantic_net: both have the same soldier
-action pool including stutter; one passes a commander decision, the other passes semantic
-activations.
+The key comparison is jev_commander_stutter vs jev_semantic_net. They share the same arena, micro primitives, blackboard, reflexes and confidence gating. The semantic policy exposes all nine Marine actions directly (including stim) and rewrites the two commander-dependent criteria (focus_bane and bait) in terms of perceptions/local state, because it has no squad plan or commander-owned stim decision.
 
 ## Run
 
