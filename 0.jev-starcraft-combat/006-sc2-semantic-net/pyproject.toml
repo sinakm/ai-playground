@@ -1,7 +1,7 @@
 [project]
-name = "sc2-stutter-step"
+name = "sc2-semantic-net"
 version = "0.1.0"
-description = "Can Jev use stutter-step micro against Banelings?"
+description = "Can Jev coordinate Marines through a semantic hidden layer?"
 requires-python = ">=3.12"
 dependencies = [
     "burnysc2==7.3.0",
