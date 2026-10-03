@@ -24,6 +24,7 @@ BAR = (76, 114, 176)
 CHOSEN = (85, 168, 104)
 
 POLICY_LABELS = {
+    "jev_semantic_net": ("SEMANTIC NET", "Jev vs Banelings, round 6: semantic neurons", "shared probabilistic perceptions -> per-Marine actions"),
     "jev_commander_stutter": (
         "COMMANDER + STUTTER",
         "Jev vs Banelings, round 5: stutter-step",
