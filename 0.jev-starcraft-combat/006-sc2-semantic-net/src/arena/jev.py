@@ -163,3 +163,70 @@ class JevCommanderClient:
             output_tokens=r1.usage.output_tokens + r2.usage.output_tokens,
             model=r2.model,
         )
+
+
+@dataclass(frozen=True)
+class JevSemanticAnswer:
+    activations: dict[str, float]
+    actions: dict[int, str]
+    confidences: dict[int, float]
+    perception_latency_ms: float
+    soldier_latency_ms: float
+    input_tokens: int
+    output_tokens: int
+    model: str
+
+
+class JevSemanticClient:
+    """Layer 1 emits semantic probabilities; layer 2 maps them plus local state to actions."""
+
+    def __init__(self, client=None):
+        self._client = client if client is not None else _default_client()
+
+    def ask(
+        self,
+        state: dict,
+        marine_tags: list[int],
+        soldier_actions: dict[str, str] = config.COMMANDER_STUTTER_MARINE_ACTIONS,
+    ) -> JevSemanticAnswer:
+        perception_questions = {
+            key: Noul(instructions=text) for key, text in config.SEMANTIC_PERCEPTIONS.items()
+        }
+        start = time.perf_counter()
+        r1 = _system_one(self._client, state, perception_questions)
+        perception_latency_ms = (time.perf_counter() - start) * 1000
+        activations = {
+            key: float(r1.answers[key].noul)
+            for key in perception_questions
+            if r1.answers.get(key) is not None
+        }
+
+        soldier_state = {**state, "semantic_activations": activations}
+        soldier_questions = {
+            marine_key(tag): Choice(
+                instructions=config.SEMANTIC_MARINE_INSTRUCTIONS_TEMPLATE.format(tag=tag),
+                criteria=soldier_actions,
+            )
+            for tag in marine_tags
+        }
+        start = time.perf_counter()
+        r2 = _system_one(self._client, soldier_state, soldier_questions)
+        soldier_latency_ms = (time.perf_counter() - start) * 1000
+
+        actions, confidences = {}, {}
+        for tag in marine_tags:
+            answer = r2.answers.get(marine_key(tag))
+            if answer is not None:
+                actions[tag] = answer.choice
+                confidences[tag] = float(answer.confidence)
+
+        return JevSemanticAnswer(
+            activations=activations,
+            actions=actions,
+            confidences=confidences,
+            perception_latency_ms=perception_latency_ms,
+            soldier_latency_ms=soldier_latency_ms,
+            input_tokens=r1.usage.input_tokens + r2.usage.input_tokens,
+            output_tokens=r1.usage.output_tokens + r2.usage.output_tokens,
+            model=r2.model,
+        )
