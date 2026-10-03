@@ -230,3 +230,44 @@ class JevSemanticClient:
             output_tokens=r1.usage.output_tokens + r2.usage.output_tokens,
             model=r2.model,
         )
+
+
+@dataclass(frozen=True)
+class JevPerceptionAnswer:
+    global_activations: dict[str, float]
+    local_activations: dict[int, dict[str, float]]
+    latency_ms: float
+    input_tokens: int
+    output_tokens: int
+    model: str
+
+
+LOCAL_PERCEPTIONS = {
+    "personal_danger": "Is Marine {tag} personally in immediate danger from nearby enemies, especially Banelings?",
+    "isolation": "Is Marine {tag} meaningfully isolated from useful support by the rest of the squad?",
+    "escape_pressure": "Does Marine {tag} have poor escape space or an urgent need to create distance?",
+    "firing_opportunity": "Does Marine {tag} currently have a strong opportunity to deal useful damage without taking disproportionate risk?",
+}
+
+
+class JevPerceptionClient:
+    """One batched Jev call: six global neurons plus four local neurons per living Marine."""
+
+    def __init__(self, client=None):
+        self._client = client if client is not None else _default_client()
+
+    def ask(self, state: dict, marine_tags: list[int]) -> JevPerceptionAnswer:
+        questions = {key: Noul(instructions=text) for key, text in config.SEMANTIC_PERCEPTIONS.items()}
+        for tag in marine_tags:
+            for key, text in LOCAL_PERCEPTIONS.items():
+                questions[f"local_{tag}_{key}"] = Noul(instructions=text.format(tag=tag))
+        start = time.perf_counter()
+        r = _system_one(self._client, state, questions)
+        latency_ms = (time.perf_counter() - start) * 1000
+        global_a = {k: float(r.answers[k].noul) for k in config.SEMANTIC_PERCEPTIONS}
+        local_a = {}
+        for tag in marine_tags:
+            local_a[tag] = {
+                k: float(r.answers[f"local_{tag}_{k}"].noul) for k in LOCAL_PERCEPTIONS
+            }
+        return JevPerceptionAnswer(global_a, local_a, latency_ms, r.usage.input_tokens, r.usage.output_tokens, r.model)
