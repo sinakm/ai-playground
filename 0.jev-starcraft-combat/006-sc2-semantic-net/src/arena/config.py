@@ -136,3 +136,20 @@ COMMANDER_MARINE_INSTRUCTIONS_TEMPLATE = (
     "unless your own situation clearly needs another action. Use your teammates on the blackboard "
     "to decide whether to cover an ally. Each action runs for 0.5 seconds."
 )
+
+
+# Episode 006: semantic hidden layer. Each item is an independent Noul probability.
+SEMANTIC_PERCEPTIONS = {
+    "baneling_pressure": "Is the squad under immediate or near-term pressure from Banelings, considering distance and contact splash danger?",
+    "clumping_danger": "Is the current Marine formation dangerously clumped given nearby Banelings?",
+    "encirclement_risk": "Is the squad at meaningful risk of being surrounded, trapped, or losing safe escape space?",
+    "focus_fire_opportunity": "Is there a strong opportunity for multiple Marines to quickly eliminate a high-value Baneling threat by concentrating fire?",
+    "retreat_pressure": "Does current health, enemy proximity, and local pressure make disengaging or creating distance valuable right now?",
+    "formation_instability": "Is the formation unstable, with Marines isolated, crowding one another, or positioned so local movement is needed?",
+}
+
+SEMANTIC_MARINE_INSTRUCTIONS_TEMPLATE = (
+    "Choose the best action for Marine {tag}. The state contains shared semantic_activations between 0 and 1 produced by a separate Jev perception layer. "
+    "Treat them as uncertain shared battlefield perceptions, not commands. Combine them with this Marine's local facts and teammate blackboard. "
+    "Goal: kill as many Zerg as possible while keeping at least one Marine alive. Each action runs for about 0.5 seconds."
+)
