@@ -22,10 +22,10 @@ RESULTS_DIR = EP_DIR / "results"
 WARMUP_STATE = {"note": "warmup call before the fight", "rules": config.STATE_RULES}
 
 
-def play_one(policy_name: str, seed: int, runs_dir: Path, realtime: bool, recorder_factory=None) -> Path:
+def play_one(policy_name: str, seed: int, runs_dir: Path, realtime: bool, recorder_factory=None, training: bool = False, weights_path: Path | None = None) -> Path:
     run_dir = runs_dir / f"{policy_name}-{time.strftime('%Y%m%d-%H%M%S')}-s{seed}"
     run_dir.mkdir(parents=True)
-    policy = make_policy(policy_name, seed)
+    policy = make_policy(policy_name, seed, training=training, weights_path=str(weights_path) if weights_path else None)
     if hasattr(policy, "warmup"):
         policy.warmup(WARMUP_STATE)
     recorder = recorder_factory(run_dir) if recorder_factory else None
@@ -53,6 +53,8 @@ def main(argv: list[str] | None = None) -> None:
     r.add_argument("--realtime", action="store_true")
     r.add_argument("--record", action="store_true", help="capture SC2 window (+ audio); implies --realtime")
     r.add_argument("--no-audio", action="store_true")
+    r.add_argument("--train", action="store_true", help="update episode-007 policy weights after each battle")
+    r.add_argument("--weights", type=Path, default=EP_DIR / "models" / "semantic_policy.json")
     sub.add_parser("evaluate", help="aggregate runs/ into results/")
     d = sub.add_parser("render", help="render showcase video for one run dir")
     d.add_argument("--run", type=Path, required=True)
@@ -65,7 +67,7 @@ def main(argv: list[str] | None = None) -> None:
 
             factory = make_recorder_factory(audio=not args.no_audio)
         for i in range(args.runs):
-            run_dir = play_one(args.policy, args.seed_base + i, RUNS_DIR, args.realtime or args.record, factory)
+            run_dir = play_one(args.policy, args.seed_base + i, RUNS_DIR, args.realtime or args.record, factory, args.train, args.weights)
             print(f"run {i + 1}/{args.runs}: {run_dir}")
     elif args.cmd == "evaluate":
         from arena.evaluate import evaluate, format_table
