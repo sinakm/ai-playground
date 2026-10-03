@@ -530,6 +530,10 @@ class ArenaBot(BotAI):
         else:
             result = "timeout"
         initial_enemies = self.initial_enemies if self.initial_enemies is not None else enemies_alive
+        enemies_killed = initial_enemies - enemies_alive
+        reward = (enemies_killed if marines_alive > 0 else 0) + 0.25 * marines_alive + 0.01 * hp_alive_sum
+        if hasattr(self.policy, "end_episode"):
+            self.policy.end_episode(reward)
         summary = {
             "policy": self.policy.name,
             "seed": self.seed,
@@ -538,7 +542,8 @@ class ArenaBot(BotAI):
             "marines_alive": marines_alive,
             "enemies_alive": enemies_alive,
             "initial_enemies": initial_enemies,
-            "enemies_killed": initial_enemies - enemies_alive,
+            "enemies_killed": enemies_killed,
+            "training_reward": round(reward, 3),
             "fight_seconds": round(elapsed / config.LOOPS_PER_SECOND, 2),
             "decisions": self.decisions,
             "late_decisions": self.late,
