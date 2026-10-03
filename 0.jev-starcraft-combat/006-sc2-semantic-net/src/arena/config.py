@@ -153,3 +153,17 @@ SEMANTIC_MARINE_INSTRUCTIONS_TEMPLATE = (
     "Treat them as uncertain shared battlefield perceptions, not commands. Combine them with this Marine's local facts and teammate blackboard. "
     "Goal: kill as many Zerg as possible while keeping at least one Marine alive. Each action runs for about 0.5 seconds."
 )
+
+# Semantic-net soldier criteria remove references to commander-only plans/targets.
+# All nine actions remain available; the semantic activations are evidence, not commands.
+SEMANTIC_MARINE_ACTIONS = {
+    **MARINE_ACTIONS,
+    "focus_bane": (
+        "focus_fire_opportunity is high, or a baneling is about to reach a teammate: "
+        "shoot the Baneling posing the strongest immediate threat"
+    ),
+    "bait": (
+        "baneling_pressure and clumping_danger are high, and you are the Marine closest "
+        "to the Banelings: run away from the squad to pull Banelings after you"
+    ),
+}
