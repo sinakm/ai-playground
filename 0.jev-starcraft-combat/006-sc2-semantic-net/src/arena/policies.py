@@ -148,7 +148,7 @@ class JevSemanticNet:
     name = "jev_semantic_net"
     uses_blackboard = True
     stutter_default = True
-    soldier_actions = config.COMMANDER_STUTTER_MARINE_ACTIONS
+    soldier_actions = config.SEMANTIC_MARINE_ACTIONS
 
     def __init__(self, client: JevSemanticClient):
         self._client = client
