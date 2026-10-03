@@ -187,7 +187,7 @@ class JevSemanticClient:
         self,
         state: dict,
         marine_tags: list[int],
-        soldier_actions: dict[str, str] = config.COMMANDER_STUTTER_MARINE_ACTIONS,
+        soldier_actions: dict[str, str] = config.SEMANTIC_MARINE_ACTIONS,
     ) -> JevSemanticAnswer:
         perception_questions = {
             key: Noul(instructions=text) for key, text in config.SEMANTIC_PERCEPTIONS.items()
