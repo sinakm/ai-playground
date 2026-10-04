@@ -236,6 +236,7 @@ class JevSemanticClient:
 class JevPerceptionAnswer:
     global_activations: dict[str, float]
     local_activations: dict[int, dict[str, float]]
+    priority_target: int | None
     latency_ms: float
     input_tokens: int
     output_tokens: int
@@ -249,6 +250,12 @@ LOCAL_PERCEPTIONS = {
     "firing_opportunity": "Does Marine {tag} currently have a strong opportunity to deal useful damage without taking disproportionate risk?",
 }
 
+PERCEPTION_TARGET_KEY = "semantic_priority_target"
+PERCEPTION_TARGET_INSTRUCTIONS = (
+    "Which candidate Baneling is the most immediate shared threat to the squad right now? "
+    "Identify the threat; do not choose a squad plan."
+)
+
 
 class JevPerceptionClient:
     """One batched Jev call: six global neurons plus four local neurons per living Marine."""
@@ -261,6 +268,12 @@ class JevPerceptionClient:
         for tag in marine_tags:
             for key, text in LOCAL_PERCEPTIONS.items():
                 questions[f"local_{tag}_{key}"] = Noul(instructions=text.format(tag=tag))
+        target_options = priority_target_options(state.get("priority_candidates") or [])
+        if target_options:
+            questions[PERCEPTION_TARGET_KEY] = Choice(
+                instructions=PERCEPTION_TARGET_INSTRUCTIONS,
+                criteria=target_options,
+            )
         start = time.perf_counter()
         r = _system_one(self._client, state, questions)
         latency_ms = (time.perf_counter() - start) * 1000
@@ -270,4 +283,18 @@ class JevPerceptionClient:
             local_a[tag] = {
                 k: float(r.answers[f"local_{tag}_{k}"].noul) for k in LOCAL_PERCEPTIONS
             }
-        return JevPerceptionAnswer(global_a, local_a, latency_ms, r.usage.input_tokens, r.usage.output_tokens, r.model)
+        target_tag = None
+        if target_options:
+            answer = r.answers.get(PERCEPTION_TARGET_KEY)
+            choice = answer.choice if answer is not None else None
+            if choice in target_options:
+                target_tag = int(choice.removeprefix("bane_"))
+        return JevPerceptionAnswer(
+            global_a,
+            local_a,
+            target_tag,
+            latency_ms,
+            r.usage.input_tokens,
+            r.usage.output_tokens,
+            r.model,
+        )
