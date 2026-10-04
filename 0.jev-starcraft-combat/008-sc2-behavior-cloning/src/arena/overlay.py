@@ -24,7 +24,8 @@ BAR = (76, 114, 176)
 CHOSEN = (85, 168, 104)
 
 POLICY_LABELS = {
-    "jev_trainable_semantic": ("TRAINABLE SEMANTIC", "Jev vs Banelings, round 7: learned semantic policy", "frozen Jev perception -> 10x16x9 local MLP"),
+    "jev_teacher_collect": ("TEACHER + PERCEPTION", "Jev vs Banelings, round 8: collect teacher traces", "commander acts while semantic perception observes"),
+    "jev_trainable_semantic": ("CLONED SEMANTIC", "Jev vs Banelings, round 8: behavior-cloned policy", "frozen Jev perception -> 10x16x8 MLP + stim head"),
     "jev_semantic_net": ("SEMANTIC NET", "Jev vs Banelings, round 6: semantic neurons", "shared probabilistic perceptions -> per-Marine actions"),
     "jev_commander_stutter": (
         "COMMANDER + STUTTER",
@@ -44,8 +45,8 @@ POLICY_LABELS = {
     ),
     "attack_move": ("ATTACK-MOVE", "Attack-move vs Banelings", "baseline: no AI, just charge"),
 }
-PER_MARINE_POLICIES = ("random", "stutter_all", "jev_commander", "jev_commander_stutter")
-COMMANDER_POLICIES = ("jev_commander", "jev_commander_stutter")
+PER_MARINE_POLICIES = ("random", "stutter_all", "jev_commander", "jev_commander_stutter", "jev_semantic_net", "jev_trainable_semantic", "jev_teacher_collect")
+COMMANDER_POLICIES = ("jev_commander", "jev_commander_stutter", "jev_teacher_collect")
 
 
 def _font(size: int):
@@ -84,8 +85,10 @@ def _action_list(record: dict) -> dict[str, str]:
     if record.get("policy") == "jev_commander":
         # Stim is the commander's call (shown in the header); retreat_to_squad is a reflex.
         return {**config.COMMANDER_MARINE_ACTIONS, **executed_only}
-    if record.get("policy") == "jev_commander_stutter":
+    if record.get("policy") in ("jev_commander_stutter", "jev_teacher_collect"):
         return {**config.COMMANDER_STUTTER_MARINE_ACTIONS, **executed_only}
+    if record.get("policy") == "jev_trainable_semantic":
+        return {a: t for a, t in config.MARINE_ACTIONS.items() if a != "stim"} | executed_only
     return config.MARINE_ACTIONS
 
 
