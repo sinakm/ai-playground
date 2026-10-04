@@ -133,7 +133,7 @@ def state_of(tags):
 
 
 def test_policy_names():
-    assert POLICY_NAMES == ("attack_move", "random", "stutter_all", "jev_commander", "jev_commander_stutter", "jev_semantic_net", "jev_trainable_semantic")
+    assert POLICY_NAMES == ("attack_move", "random", "stutter_all", "jev_commander", "jev_commander_stutter", "jev_semantic_net", "jev_trainable_semantic", "jev_teacher_collect")
     with pytest.raises(ValueError):
         make_policy("jev_marine", seed=0)
 
