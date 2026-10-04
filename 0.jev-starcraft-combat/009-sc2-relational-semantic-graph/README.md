@@ -16,6 +16,55 @@ tiny. We add semantic **edges** between a Marine and the important entities arou
 (T=1 stims on 44% of steps vs teacher 5.7%). Details:
 [`../notes/2026-10-04-ep009-findings.md`](../notes/2026-10-04-ep009-findings.md).
 
+## Round 9b — stim/evaluation fix
+
+Round 9a showed that the action policy is already strong, but the stim head was decoded incorrectly
+for sampled action runs. The learned head only weakly separates stim/non-stim states
+(p about 0.48 vs 0.41), so Bernoulli sampling caused stim on ~44% of decision steps even though
+the teacher stims ~5.7%.
+
+For 9b, action decoding is unchanged, but stim is always decoded independently and
+deterministically:
+
+    stim_now = p(stim) >= stim_threshold
+
+The default threshold is 0.5. Action temperature no longer changes stim behavior.
+Each decision log now includes `stim_probability`.
+
+**No retraining is required** for the existing `models/relational_policy.json`.
+
+Run the corrected T=1 student on all matched seeds in an isolated run group:
+
+    uv run arena run \
+      --policy jev_distilled_semantic \
+      --runs 20 \
+      --seed-base 0 \
+      --weights models/relational_policy.json \
+      --temperature 1.0 \
+      --stim-threshold 0.5 \
+      --run-group stimfix-t1
+
+    uv run arena evaluate --run-group stimfix-t1
+
+Then complete the promising argmax diagnostic on the same 20 seeds:
+
+    uv run arena run \
+      --policy jev_distilled_semantic \
+      --runs 20 \
+      --seed-base 0 \
+      --weights models/relational_policy.json \
+      --temperature 0 \
+      --stim-threshold 0.5 \
+      --run-group argmax20
+
+    uv run arena evaluate --run-group argmax20
+
+The `--run-group` option writes to `runs/<group>/` and evaluates into
+`results/<group>/`, so variants cannot accidentally be mixed into the primary result table.
+
+For 9b, the key comparison is survivors and survivor HP, not win rate: the scenario is already
+saturated at 20/20.
+
 ## Architecture
 
 Perception is now two batched Jev calls.
