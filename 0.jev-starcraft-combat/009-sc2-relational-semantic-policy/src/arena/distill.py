@@ -71,7 +71,7 @@ class DistilledSemanticMLP:
     def stim_prob(self, global_x):
         return float(_sigmoid(np.asarray(global_x, dtype=float) @ self.ws + self.bs))
 
-    def act(self, global_a, local_a, rng, temperature=0.7):
+    def act(self, global_a, local_a, rng, temperature=1.0):
         x = self.vector(global_a, local_a)
         p = self.action_probs(x, temperature=temperature)
         if temperature <= 0:
