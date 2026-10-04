@@ -22,10 +22,10 @@ RESULTS_DIR = EP_DIR / "results"
 WARMUP_STATE = {"note": "warmup call before the fight", "rules": config.STATE_RULES}
 
 
-def play_one(policy_name: str, seed: int, runs_dir: Path, realtime: bool, recorder_factory=None, training: bool = False, weights_path: Path | None = None) -> Path:
+def play_one(policy_name: str, seed: int, runs_dir: Path, realtime: bool, recorder_factory=None, training: bool = False, weights_path: Path | None = None, sample_eval: bool = False, temperature: float = 1.0) -> Path:
     run_dir = runs_dir / f"{policy_name}-{time.strftime('%Y%m%d-%H%M%S')}-s{seed}"
     run_dir.mkdir(parents=True)
-    policy = make_policy(policy_name, seed, training=training, weights_path=str(weights_path) if weights_path else None)
+    policy = make_policy(policy_name, seed, training=training, weights_path=str(weights_path) if weights_path else None, sample_eval=sample_eval, temperature=temperature)
     if hasattr(policy, "warmup"):
         policy.warmup(WARMUP_STATE)
     recorder = recorder_factory(run_dir) if recorder_factory else None
@@ -54,8 +54,21 @@ def main(argv: list[str] | None = None) -> None:
     r.add_argument("--record", action="store_true", help="capture SC2 window (+ audio); implies --realtime")
     r.add_argument("--no-audio", action="store_true")
     r.add_argument("--train", action="store_true", help="update episode-007 policy weights after each battle")
-    r.add_argument("--weights", type=Path, default=EP_DIR / "models" / "semantic_policy.json")
+    r.add_argument("--weights", type=Path, default=EP_DIR / "models" / "semantic_policy_bc.json")
+    r.add_argument("--sample-eval", action="store_true", help="sample actions at evaluation instead of argmax")
+    r.add_argument("--temperature", type=float, default=1.0, help="softmax temperature for --sample-eval")
     sub.add_parser("evaluate", help="aggregate runs/ into results/")
+    c = sub.add_parser("clone", help="behavior-clone the MLP from jev_teacher_collect runs")
+    c.add_argument("--runs-dir", type=Path, default=RUNS_DIR)
+    c.add_argument("--weights", type=Path, default=EP_DIR / "models" / "semantic_policy_bc.json")
+    c.add_argument("--metrics", type=Path, default=EP_DIR / "models" / "clone_metrics.json")
+    c.add_argument("--epochs", type=int, default=150)
+    c.add_argument("--learning-rate", type=float, default=0.03)
+    c.add_argument("--batch-size", type=int, default=512)
+    c.add_argument("--balance-power", type=float, default=0.5)
+    c.add_argument("--val-fraction", type=float, default=0.2)
+    c.add_argument("--seed", type=int, default=0)
+    c.add_argument("--init-weights", type=Path, default=None)
     d = sub.add_parser("render", help="render showcase video for one run dir")
     d.add_argument("--run", type=Path, required=True)
     args = parser.parse_args(argv)
@@ -67,12 +80,29 @@ def main(argv: list[str] | None = None) -> None:
 
             factory = make_recorder_factory(audio=not args.no_audio)
         for i in range(args.runs):
-            run_dir = play_one(args.policy, args.seed_base + i, RUNS_DIR, args.realtime or args.record, factory, args.train, args.weights)
+            run_dir = play_one(args.policy, args.seed_base + i, RUNS_DIR, args.realtime or args.record, factory, args.train, args.weights, args.sample_eval, args.temperature)
             print(f"run {i + 1}/{args.runs}: {run_dir}")
     elif args.cmd == "evaluate":
         from arena.evaluate import evaluate, format_table
 
         print(format_table(evaluate(RUNS_DIR, RESULTS_DIR)))
+    elif args.cmd == "clone":
+        import json
+        from arena.clone import train_behavior_clone
+
+        metrics = train_behavior_clone(
+            args.runs_dir,
+            args.weights,
+            args.metrics,
+            epochs=args.epochs,
+            learning_rate=args.learning_rate,
+            batch_size=args.batch_size,
+            balance_power=args.balance_power,
+            val_fraction=args.val_fraction,
+            seed=args.seed,
+            init_weights=args.init_weights,
+        )
+        print(json.dumps(metrics, indent=2))
     else:
         from arena.overlay import render
 
