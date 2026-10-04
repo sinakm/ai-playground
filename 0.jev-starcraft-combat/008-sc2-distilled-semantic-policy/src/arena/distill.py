@@ -183,9 +183,24 @@ def train_behavior_clone(dataset_path, output_path, epochs=120, batch_size=256, 
 
     model.save(output_path)
     counts = {a: int((y == i).sum()) for i, a in enumerate(ACTIONS)}
+    decision_rows = 0
+    target_pairs = 0
+    target_matches = 0
+    for line in Path(dataset_path).read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        decision_rows += 1
+        row = json.loads(line)
+        teacher_target = row.get("teacher_priority_target")
+        perception_target = row.get("perception_priority_target")
+        if teacher_target is not None:
+            target_pairs += 1
+            target_matches += int(teacher_target == perception_target)
     return {
         "samples": int(len(y)),
+        "decision_rows": int(decision_rows),
         "episodes": int(len(np.unique(seeds))),
+        "priority_target_agreement": (float(target_matches / target_pairs) if target_pairs else None),
         "train": _metrics(model, X[train_idx], y[train_idx], G[train_idx], stim[train_idx]),
         "validation": _metrics(model, X[val_idx], y[val_idx], G[val_idx], stim[val_idx]),
         "action_counts": counts,
