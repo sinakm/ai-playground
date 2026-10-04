@@ -242,7 +242,7 @@ class JevDistilledSemantic:
     stutter_default = True
 
     def __init__(self, client: JevPerceptionClient, seed: int,
-                 weights_path: str | None, temperature: float = 0.7):
+                 weights_path: str | None, temperature: float = 1.0):
         if not weights_path:
             raise ValueError("jev_distilled_semantic requires --weights")
         self._client = client
@@ -390,7 +390,7 @@ class JevCommanderStutter(JevCommander):
 POLICY_NAMES = ("attack_move", "random", "stutter_all", "jev_commander", "jev_commander_stutter", "jev_semantic_net", "jev_trainable_semantic", "jev_teacher_collect", "jev_distilled_semantic")
 
 
-def make_policy(name: str, seed: int, jev_client=None, training: bool = False, weights_path: str | None = None, dataset_path: str | None = None, temperature: float = 0.7):
+def make_policy(name: str, seed: int, jev_client=None, training: bool = False, weights_path: str | None = None, dataset_path: str | None = None, temperature: float = 1.0):
     if name == "attack_move":
         return AttackMove()
     if name == "random":
