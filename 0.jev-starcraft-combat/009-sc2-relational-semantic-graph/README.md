@@ -87,8 +87,10 @@ Primary run: do not rebalance action classes initially. That makes the cleanest 
       --epochs 120 \
       --class-balance none
 
-The trainer now reports per-class validation recall directly. The key measurements are
-`focus_bane` and `cover_ally`.
+The trainer now reports per-class validation recall directly, plus the mean value of every
+relational edge feature grouped by teacher action. The key measurements are `focus_bane` and
+`cover_ally`: we should be able to see whether the new edge features separate those labels before
+judging the MLP.
 
 Stim is trained once per battlefield decision rather than duplicated once per living Marine.
 Because stim is rare, its binary loss uses positive-class weighting by default. Disable that only
