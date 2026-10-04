@@ -36,6 +36,8 @@ class Decision:
     semantic_activations: dict[str, float] | None = None
     local_activations: dict | None = None
     relational_activations: dict | None = None
+    perception_node_latency_ms: float | None = None
+    perception_edge_latency_ms: float | None = None
 
 
 def marine_tags(state: dict) -> list[int]:
@@ -219,9 +221,13 @@ class JevTeacherCollector:
             soldier_latency_ms=a.soldier_latency_ms,
             stim_now=a.stim_now,
             plan_kept_low_confidence=a.plan_kept_low_confidence,
+            perception_node_latency_ms=p.node_latency_ms,
+            perception_edge_latency_ms=p.edge_latency_ms,
             semantic_activations=p.global_activations,
             local_activations=p.local_activations,
             relational_activations=p.relational_activations,
+            perception_node_latency_ms=p.node_latency_ms,
+            perception_edge_latency_ms=p.edge_latency_ms,
         )
 
     def observe_executed(self, executed: dict | None) -> None:
@@ -288,6 +294,8 @@ class JevDistilledSemantic:
             semantic_activations=p.global_activations,
             local_activations=p.local_activations,
             relational_activations=p.relational_activations,
+            perception_node_latency_ms=p.node_latency_ms,
+            perception_edge_latency_ms=p.edge_latency_ms,
         )
 
 
