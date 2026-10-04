@@ -227,12 +227,16 @@ class SemanticMLP:
             z = h @ self.w2.T + self.b2
             pred = np.argmax(z, axis=1)
             action_accuracy = float(np.mean(pred == y))
+            majority_baseline = float(np.max(np.bincount(y, minlength=len(ACTIONS))) / len(y))
             for i, action in enumerate(ACTIONS):
                 mask = y == i
                 per_class_recall[action] = float(np.mean(pred[mask] == i)) if np.any(mask) else None
                 predicted_action_share[action] = float(np.mean(pred == i))
         else:
             action_accuracy = None
+            majority_baseline = None
+        recalls = [v for v in per_class_recall.values() if v is not None]
+        balanced_accuracy = float(np.mean(recalls)) if recalls else None
         stim_accuracy = None
         stim_positive_rate = None
         stim_predicted_positive_rate = None
@@ -245,6 +249,8 @@ class SemanticMLP:
             stim_predicted_positive_rate = float(np.mean(sp))
         return {
             "action_accuracy": action_accuracy,
+            "majority_baseline": majority_baseline,
+            "balanced_accuracy": balanced_accuracy,
             "per_class_recall": per_class_recall,
             "predicted_action_share": predicted_action_share,
             "stim_accuracy": stim_accuracy,
