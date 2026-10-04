@@ -33,6 +33,8 @@ class Decision:
     plan_kept_low_confidence: bool | None = None
     semantic_activations: dict[str, float] | None = None
     local_activations: dict | None = None
+    perception_target: int | None = None
+    perception_latency_ms: float | None = None
 
 
 def marine_tags(state: dict) -> list[int]:
@@ -155,10 +157,20 @@ class JevTrainableSemantic:
     uses_blackboard = True
     stutter_default = True
 
-    def __init__(self, client: JevPerceptionClient, seed: int, training: bool = False, weights_path: str | None = None):
+    def __init__(
+        self,
+        client: JevPerceptionClient,
+        seed: int,
+        training: bool = False,
+        weights_path: str | None = None,
+        sample_eval: bool = False,
+        temperature: float = 1.0,
+    ):
         self._client = client
         self._rng = np.random.default_rng(seed)
         self.training = training
+        self.sample_eval = sample_eval
+        self.temperature = temperature
         self.weights_path = Path(weights_path) if weights_path else None
         self.net = SemanticMLP(seed=seed)
         if self.weights_path is not None and self.weights_path.exists():
@@ -174,7 +186,13 @@ class JevTrainableSemantic:
         self._step_start = len(self.net.trajectory)
         for tag in tags:
             action, prob, _ = self.net.act(
-                p.global_activations, p.local_activations[tag], self._rng, training=self.training, key=tag
+                p.global_activations,
+                p.local_activations[tag],
+                self._rng,
+                training=self.training,
+                key=tag,
+                sample_eval=self.sample_eval,
+                temperature=self.temperature,
             )
             actions[tag] = action
             # Do not route learned-policy actions through Jev's confidence fallback.
@@ -187,6 +205,10 @@ class JevTrainableSemantic:
             model=p.model, marine_actions=actions, marine_confidences=confidences,
             semantic_activations=p.global_activations,
             local_activations=p.local_activations,
+            priority_target=p.priority_target,
+            perception_target=p.priority_target,
+            perception_latency_ms=p.latency_ms,
+            stim_now=self.net.stim_probability(p.global_activations) >= 0.5,
         )
 
     def observe_executed(self, executed: dict | None) -> None:
@@ -202,6 +224,75 @@ class JevTrainableSemantic:
         if self.weights_path is not None:
             self.weights_path.parent.mkdir(parents=True, exist_ok=True)
             self.net.save(self.weights_path)
+
+
+
+
+class JevTeacherCollect:
+    """Successful commander controls the game while frozen Jev perception observes the same state.
+
+    The resulting decision log is a matched behavior-cloning dataset:
+    semantic activations + local activations -> executed teacher action.
+    """
+
+    name = "jev_teacher_collect"
+    uses_blackboard = True
+    stutter_default = True
+    soldier_actions = config.COMMANDER_STUTTER_MARINE_ACTIONS
+
+    def __init__(self, commander=None, perception=None):
+        self._commander = commander if commander is not None else JevCommanderClient()
+        self._perception = perception if perception is not None else JevPerceptionClient()
+        self._previous_plan: str | None = None
+        self._contact_seen = False
+
+    def warmup(self, state: dict) -> None:
+        warm = {**state, "marines": [WARMUP_MARINE], "priority_candidates": []}
+        self._perception.ask(warm, [WARMUP_MARINE["id"]])
+        self._commander.ask(
+            warm,
+            [WARMUP_MARINE["id"]],
+            soldier_actions=self.soldier_actions,
+        )
+
+    def decide(self, state: dict) -> Decision:
+        tags = marine_tags(state)
+        nearest = (state.get("summary") or {}).get("nearest_baneling_distance")
+        if nearest is not None and nearest <= config.PRE_CONTACT_DISTANCE:
+            self._contact_seen = True
+
+        p = self._perception.ask(state, tags)
+        a = self._commander.ask(
+            state,
+            tags,
+            previous_plan=self._previous_plan,
+            after_contact=self._contact_seen,
+            soldier_actions=self.soldier_actions,
+        )
+        self._previous_plan = a.plan
+        action, shares = aggregate(a.actions)
+        confs = list(a.confidences.values())
+        return Decision(
+            action=action,
+            probabilities=shares,
+            confidence=sum(confs) / len(confs) if confs else None,
+            latency_ms=p.latency_ms + a.commander_latency_ms + a.soldier_latency_ms,
+            input_tokens=p.input_tokens + a.input_tokens,
+            output_tokens=p.output_tokens + a.output_tokens,
+            model=a.model,
+            marine_actions=a.actions,
+            marine_confidences=a.confidences,
+            squad_plan=a.plan,
+            priority_target=a.target_tag,
+            perception_target=p.priority_target,
+            commander_latency_ms=a.commander_latency_ms,
+            soldier_latency_ms=a.soldier_latency_ms,
+            perception_latency_ms=p.latency_ms,
+            stim_now=a.stim_now,
+            plan_kept_low_confidence=a.plan_kept_low_confidence,
+            semantic_activations=p.global_activations,
+            local_activations=p.local_activations,
+        )
 
 
 class JevSemanticNet:
@@ -251,10 +342,18 @@ class JevCommanderStutter(JevCommander):
     soldier_actions = config.COMMANDER_STUTTER_MARINE_ACTIONS
 
 
-POLICY_NAMES = ("attack_move", "random", "stutter_all", "jev_commander", "jev_commander_stutter", "jev_semantic_net", "jev_trainable_semantic")
+POLICY_NAMES = ("attack_move", "random", "stutter_all", "jev_commander", "jev_commander_stutter", "jev_semantic_net", "jev_trainable_semantic", "jev_teacher_collect")
 
 
-def make_policy(name: str, seed: int, jev_client=None, training: bool = False, weights_path: str | None = None):
+def make_policy(
+    name: str,
+    seed: int,
+    jev_client=None,
+    training: bool = False,
+    weights_path: str | None = None,
+    sample_eval: bool = False,
+    temperature: float = 1.0,
+):
     if name == "attack_move":
         return AttackMove()
     if name == "random":
@@ -268,5 +367,14 @@ def make_policy(name: str, seed: int, jev_client=None, training: bool = False, w
     if name == "jev_semantic_net":
         return JevSemanticNet(jev_client if jev_client is not None else JevSemanticClient())
     if name == "jev_trainable_semantic":
-        return JevTrainableSemantic(jev_client if jev_client is not None else JevPerceptionClient(), seed, training, weights_path)
+        return JevTrainableSemantic(
+            jev_client if jev_client is not None else JevPerceptionClient(),
+            seed,
+            training,
+            weights_path,
+            sample_eval,
+            temperature,
+        )
+    if name == "jev_teacher_collect":
+        return JevTeacherCollect()
     raise ValueError(f"unknown policy: {name}")
