@@ -22,7 +22,7 @@ RESULTS_DIR = EP_DIR / "results"
 WARMUP_STATE = {"note": "warmup call before the fight", "rules": config.STATE_RULES}
 
 
-def play_one(policy_name: str, seed: int, runs_dir: Path, realtime: bool, recorder_factory=None, training: bool = False, weights_path: Path | None = None, dataset_path: Path | None = None, temperature: float = 0.7) -> Path:
+def play_one(policy_name: str, seed: int, runs_dir: Path, realtime: bool, recorder_factory=None, training: bool = False, weights_path: Path | None = None, dataset_path: Path | None = None, temperature: float = 1.0) -> Path:
     run_dir = runs_dir / f"{policy_name}-{time.strftime('%Y%m%d-%H%M%S')}-s{seed}"
     run_dir.mkdir(parents=True)
     policy = make_policy(policy_name, seed, training=training, weights_path=str(weights_path) if weights_path else None, dataset_path=str(dataset_path) if dataset_path else None, temperature=temperature)
@@ -56,7 +56,7 @@ def main(argv: list[str] | None = None) -> None:
     r.add_argument("--train", action="store_true", help="update episode-007 policy weights after each battle")
     r.add_argument("--weights", type=Path, default=EP_DIR / "models" / "distilled_policy.json")
     r.add_argument("--dataset", type=Path, default=EP_DIR / "data" / "teacher.jsonl")
-    r.add_argument("--temperature", type=float, default=0.7, help="student sampling temperature; 0 = argmax")
+    r.add_argument("--temperature", type=float, default=1.0, help="student sampling temperature; 0 = argmax")
     bc = sub.add_parser("train-bc", help="train the episode-008 student from teacher JSONL")
     bc.add_argument("--dataset", type=Path, default=EP_DIR / "data" / "teacher.jsonl")
     bc.add_argument("--weights", type=Path, default=EP_DIR / "models" / "distilled_policy.json")
