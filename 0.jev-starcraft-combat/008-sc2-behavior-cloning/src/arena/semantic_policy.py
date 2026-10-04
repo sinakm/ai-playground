@@ -220,20 +220,37 @@ class SemanticMLP:
     def supervised_metrics(self, x, y, stim_x=None, stim_y=None):
         x = np.asarray(x, dtype=float)
         y = np.asarray(y, dtype=int)
+        per_class_recall = {}
+        predicted_action_share = {}
         if len(x):
             h = np.tanh(x @ self.w1.T + self.b1)
             z = h @ self.w2.T + self.b2
             pred = np.argmax(z, axis=1)
             action_accuracy = float(np.mean(pred == y))
+            for i, action in enumerate(ACTIONS):
+                mask = y == i
+                per_class_recall[action] = float(np.mean(pred[mask] == i)) if np.any(mask) else None
+                predicted_action_share[action] = float(np.mean(pred == i))
         else:
             action_accuracy = None
         stim_accuracy = None
+        stim_positive_rate = None
+        stim_predicted_positive_rate = None
         if stim_x is not None and len(stim_x):
             sx = np.asarray(stim_x, dtype=float)
             sy = np.asarray(stim_y, dtype=int)
             sp = _sigmoid(sx @ self.w_stim + self.b_stim) >= 0.5
             stim_accuracy = float(np.mean(sp == sy))
-        return {"action_accuracy": action_accuracy, "stim_accuracy": stim_accuracy}
+            stim_positive_rate = float(np.mean(sy))
+            stim_predicted_positive_rate = float(np.mean(sp))
+        return {
+            "action_accuracy": action_accuracy,
+            "per_class_recall": per_class_recall,
+            "predicted_action_share": predicted_action_share,
+            "stim_accuracy": stim_accuracy,
+            "stim_positive_rate": stim_positive_rate,
+            "stim_predicted_positive_rate": stim_predicted_positive_rate,
+        }
 
     def save(self, path):
         Path(path).write_text(
