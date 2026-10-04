@@ -1,11 +1,12 @@
-"""Behavior-cloned policy for episode 008.
+"""Behavior cloning over Jev node + edge semantics for episode 009.
 
-Jev stays frozen and supplies semantic perception. The numerical student has:
-- a shared 11 -> 16 -> 8 per-Marine action head (stim excluded), and
-- a separate 7 -> 1 squad-stim head.
+Jev stays frozen. Each Marine receives:
+- 7 global node activations
+- 4 local Marine node activations
+- 4 relational edge activations
 
-Teacher data are grouped by episode seed so validation never sees decisions from a
-trajectory used for training.
+The action student is a shared 15 -> 16 -> 8 MLP.
+Stim remains a separate decision-level 7 -> 1 logistic head.
 """
 from __future__ import annotations
 
@@ -15,15 +16,23 @@ import numpy as np
 
 GLOBAL_KEYS = (
     "baneling_pressure", "clumping_danger", "encirclement_risk",
-    "focus_fire_opportunity", "retreat_pressure", "formation_instability", "stim_opportunity",
+    "focus_fire_opportunity", "retreat_pressure", "formation_instability",
+    "stim_opportunity",
 )
 LOCAL_KEYS = ("personal_danger", "isolation", "escape_pressure", "firing_opportunity")
+RELATIONAL_KEYS = (
+    "target_engagement_value",
+    "target_threat_to_local_group",
+    "ally_needs_cover",
+    "cover_effectiveness",
+)
 ACTIONS = ("kite", "split", "attack", "retreat", "focus_bane", "cover_ally", "bait", "stutter")
-INPUT_DIM = len(GLOBAL_KEYS) + len(LOCAL_KEYS)
+INPUT_DIM = len(GLOBAL_KEYS) + len(LOCAL_KEYS) + len(RELATIONAL_KEYS)
 HIDDEN_DIM = 16
 
 
 def _softmax(z):
+    z = np.asarray(z, dtype=float)
     z = z - z.max(axis=-1, keepdims=True)
     e = np.exp(z)
     return e / e.sum(axis=-1, keepdims=True)
@@ -33,7 +42,7 @@ def _sigmoid(z):
     return 1.0 / (1.0 + np.exp(-np.clip(z, -30, 30)))
 
 
-class DistilledSemanticMLP:
+class RelationalSemanticMLP:
     def __init__(self, seed=0):
         rng = np.random.default_rng(seed)
         self.w1 = rng.normal(0, 0.15, (HIDDEN_DIM, INPUT_DIM))
@@ -44,10 +53,11 @@ class DistilledSemanticMLP:
         self.bs = 0.0
 
     @staticmethod
-    def vector(global_a, local_a):
+    def vector(global_a, local_a, relational_a):
         return np.asarray(
             [global_a.get(k, 0.5) for k in GLOBAL_KEYS]
-            + [local_a.get(k, 0.5) for k in LOCAL_KEYS],
+            + [local_a.get(k, 0.5) for k in LOCAL_KEYS]
+            + [relational_a.get(k, 0.5) for k in RELATIONAL_KEYS],
             dtype=float,
         )
 
@@ -65,13 +75,10 @@ class DistilledSemanticMLP:
     def stim_prob(self, global_x):
         return float(_sigmoid(np.asarray(global_x, dtype=float) @ self.ws + self.bs))
 
-    def act(self, global_a, local_a, rng, temperature=0.7):
-        x = self.vector(global_a, local_a)
+    def act(self, global_a, local_a, relational_a, rng, temperature=1.0):
+        x = self.vector(global_a, local_a, relational_a)
         p = self.action_probs(x, temperature=temperature)
-        if temperature <= 0:
-            idx = int(np.argmax(p))
-        else:
-            idx = int(rng.choice(len(ACTIONS), p=p))
+        idx = int(np.argmax(p)) if temperature <= 0 else int(rng.choice(len(ACTIONS), p=p))
         return ACTIONS[idx], float(p[idx]), {a: float(p[i]) for i, a in enumerate(ACTIONS)}
 
     def stim(self, global_a, rng, sample=True):
@@ -82,10 +89,11 @@ class DistilledSemanticMLP:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps({
-            "format": "episode008-distilled-v1",
+            "format": "episode009-relational-v1",
             "actions": list(ACTIONS),
             "global_keys": list(GLOBAL_KEYS),
             "local_keys": list(LOCAL_KEYS),
+            "relational_keys": list(RELATIONAL_KEYS),
             "w1": self.w1.tolist(), "b1": self.b1.tolist(),
             "w2": self.w2.tolist(), "b2": self.b2.tolist(),
             "ws": self.ws.tolist(), "bs": float(self.bs),
@@ -93,117 +101,221 @@ class DistilledSemanticMLP:
 
     def load(self, path):
         d = json.loads(Path(path).read_text(encoding="utf-8"))
-        self.w1 = np.asarray(d["w1"], dtype=float); self.b1 = np.asarray(d["b1"], dtype=float)
-        self.w2 = np.asarray(d["w2"], dtype=float); self.b2 = np.asarray(d["b2"], dtype=float)
-        self.ws = np.asarray(d["ws"], dtype=float); self.bs = float(d["bs"])
+        expected = list(RELATIONAL_KEYS)
+        if d.get("relational_keys") != expected:
+            raise ValueError(
+                f"weights relational_keys={d.get('relational_keys')} do not match {expected}; "
+                "episode 009 needs newly trained weights"
+            )
+        self.w1 = np.asarray(d["w1"], dtype=float)
+        self.b1 = np.asarray(d["b1"], dtype=float)
+        self.w2 = np.asarray(d["w2"], dtype=float)
+        self.b2 = np.asarray(d["b2"], dtype=float)
+        self.ws = np.asarray(d["ws"], dtype=float)
+        self.bs = float(d["bs"])
 
 
 def load_teacher_dataset(path):
-    rows = []
+    action_rows = []
+    decision_rows = []
     for line in Path(path).read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
         r = json.loads(line)
         g = r["global_activations"]
-        stim = int(bool(r.get("stim_now")))
         seed = int(r["episode_seed"])
+        decision_rows.append((
+            RelationalSemanticMLP.global_vector(g),
+            float(bool(r.get("stim_now"))),
+            seed,
+            r.get("perception_priority_target"),
+            r.get("teacher_priority_target"),
+        ))
+        local_all = r.get("local_activations", {})
+        rel_all = r.get("relational_activations", {})
         for tag, action in r.get("executed_actions", {}).items():
             if action not in ACTIONS:
                 continue
-            local = r["local_activations"].get(str(tag), r["local_activations"].get(int(tag), {}))
-            rows.append((DistilledSemanticMLP.vector(g, local), ACTIONS.index(action),
-                         DistilledSemanticMLP.global_vector(g), stim, seed))
-    if not rows:
-        raise ValueError(f"no usable teacher samples in {path}")
-    X = np.stack([r[0] for r in rows]); y = np.asarray([r[1] for r in rows], dtype=int)
-    G = np.stack([r[2] for r in rows]); s = np.asarray([r[3] for r in rows], dtype=float)
-    seeds = np.asarray([r[4] for r in rows], dtype=int)
-    return X, y, G, s, seeds
+            local = local_all.get(str(tag), {})
+            rel = rel_all.get(str(tag), {})
+            action_rows.append((
+                RelationalSemanticMLP.vector(g, local, rel),
+                ACTIONS.index(action),
+                seed,
+            ))
+
+    if not action_rows:
+        raise ValueError(f"no usable action samples in {path}")
+    if not decision_rows:
+        raise ValueError(f"no decision rows in {path}")
+
+    X = np.stack([r[0] for r in action_rows])
+    y = np.asarray([r[1] for r in action_rows], dtype=int)
+    action_seeds = np.asarray([r[2] for r in action_rows], dtype=int)
+
+    G = np.stack([r[0] for r in decision_rows])
+    stim = np.asarray([r[1] for r in decision_rows], dtype=float)
+    decision_seeds = np.asarray([r[2] for r in decision_rows], dtype=int)
+    target_pairs = [(r[3], r[4]) for r in decision_rows]
+    return X, y, action_seeds, G, stim, decision_seeds, target_pairs
 
 
-def _split_by_episode(seeds, validation_fraction=0.2):
+def _split_seeds(seeds, validation_fraction=0.2):
     unique = np.unique(seeds)
     if len(unique) < 2:
-        n = len(seeds)
-        cut = max(1, int(n * (1 - validation_fraction)))
-        idx = np.arange(n)
-        return idx[:cut], idx[cut:]
+        return set(unique.tolist()), set()
     n_val = max(1, int(round(len(unique) * validation_fraction)))
-    val_seeds = set(unique[-n_val:].tolist())
-    val = np.asarray([i for i, s in enumerate(seeds) if int(s) in val_seeds], dtype=int)
-    train = np.asarray([i for i, s in enumerate(seeds) if int(s) not in val_seeds], dtype=int)
-    return train, val
+    return set(unique[:-n_val].tolist()), set(unique[-n_val:].tolist())
 
 
-def _metrics(model, X, y, G, stim):
+def _indices_for_seeds(seeds, selected):
+    return np.asarray([i for i, s in enumerate(seeds) if int(s) in selected], dtype=int)
+
+
+def _action_class_weights(y, mode="none"):
+    w = np.ones(len(ACTIONS), dtype=float)
+    if mode == "none":
+        return w
+    counts = np.bincount(y, minlength=len(ACTIONS)).astype(float)
+    present = counts > 0
+    if mode == "sqrt":
+        w[present] = np.sqrt(counts[present].sum() / counts[present])
+    elif mode == "inverse":
+        w[present] = counts[present].sum() / counts[present]
+    else:
+        raise ValueError(f"unknown class_balance: {mode}")
+    w /= w[present].mean() if present.any() else 1.0
+    return w
+
+
+def _action_metrics(model, X, y):
     p = model.action_probs(X)
     eps = 1e-9
-    action_loss = float(-np.log(p[np.arange(len(y)), y] + eps).mean())
-    action_acc = float((p.argmax(axis=1) == y).mean())
-    sp = _sigmoid(G @ model.ws + model.bs)
-    stim_loss = float(-(stim * np.log(sp + eps) + (1 - stim) * np.log(1 - sp + eps)).mean())
-    stim_acc = float(((sp >= 0.5) == stim).mean())
-    return {"action_loss": action_loss, "action_accuracy": action_acc,
-            "stim_loss": stim_loss, "stim_accuracy": stim_acc}
+    pred = p.argmax(axis=1)
+    result = {
+        "loss": float(-np.log(p[np.arange(len(y)), y] + eps).mean()),
+        "accuracy": float((pred == y).mean()),
+        "per_class": {},
+    }
+    for i, action in enumerate(ACTIONS):
+        mask = y == i
+        n = int(mask.sum())
+        result["per_class"][action] = {
+            "n": n,
+            "recall": float((pred[mask] == i).mean()) if n else None,
+            "predicted_share": float((pred == i).mean()),
+            "mean_p_true": float(p[mask, i].mean()) if n else None,
+        }
+    return result
 
 
-def train_behavior_clone(dataset_path, output_path, epochs=120, batch_size=256, learning_rate=0.03,
-                         seed=0, validation_fraction=0.2, weight_decay=1e-4):
-    X, y, G, stim, seeds = load_teacher_dataset(dataset_path)
-    train_idx, val_idx = _split_by_episode(seeds, validation_fraction)
+def _stim_metrics(model, G, stim):
+    p = _sigmoid(G @ model.ws + model.bs)
+    eps = 1e-9
+    return {
+        "loss": float(-(stim * np.log(p + eps) + (1 - stim) * np.log(1 - p + eps)).mean()),
+        "accuracy": float(((p >= 0.5) == stim).mean()),
+        "positive_rate": float(stim.mean()),
+        "mean_p_positive": float(p[stim == 1].mean()) if np.any(stim == 1) else None,
+        "mean_p_negative": float(p[stim == 0].mean()) if np.any(stim == 0) else None,
+    }
+
+
+def train_behavior_clone(
+    dataset_path,
+    output_path,
+    epochs=120,
+    batch_size=256,
+    learning_rate=0.03,
+    seed=0,
+    validation_fraction=0.2,
+    weight_decay=1e-4,
+    class_balance="none",
+    balance_stim=True,
+):
+    X, y, action_seeds, G, stim, decision_seeds, target_pairs = load_teacher_dataset(dataset_path)
+    train_seeds, val_seeds = _split_seeds(action_seeds, validation_fraction)
+    train_idx = _indices_for_seeds(action_seeds, train_seeds)
+    val_idx = _indices_for_seeds(action_seeds, val_seeds)
+    train_dec = _indices_for_seeds(decision_seeds, train_seeds)
+    val_dec = _indices_for_seeds(decision_seeds, val_seeds)
     if len(val_idx) == 0:
         val_idx = train_idx
-    model = DistilledSemanticMLP(seed=seed)
+    if len(val_dec) == 0:
+        val_dec = train_dec
+
+    model = RelationalSemanticMLP(seed=seed)
     rng = np.random.default_rng(seed)
+    class_weights = _action_class_weights(y[train_idx], mode=class_balance)
+
+    positive = float(stim[train_dec].sum())
+    negative = float(len(train_dec) - positive)
+    stim_pos_weight = (negative / positive) if balance_stim and positive > 0 else 1.0
 
     for _ in range(int(epochs)):
         order = rng.permutation(train_idx)
         for start in range(0, len(order), int(batch_size)):
             idx = order[start:start + int(batch_size)]
-            xb, yb, gb, sb = X[idx], y[idx], G[idx], stim[idx]
+            xb, yb = X[idx], y[idx]
             h = np.tanh(xb @ model.w1.T + model.b1)
             p = _softmax(h @ model.w2.T + model.b2)
-            dz = p
+            dz = p.copy()
             dz[np.arange(len(idx)), yb] -= 1.0
-            dz /= len(idx)
+            sample_w = class_weights[yb]
+            dz *= sample_w[:, None]
+            dz /= max(float(sample_w.sum()), 1.0)
+
             gw2 = dz.T @ h + weight_decay * model.w2
             gb2 = dz.sum(axis=0)
             dh = (dz @ model.w2) * (1 - h * h)
             gw1 = dh.T @ xb + weight_decay * model.w1
             gb1 = dh.sum(axis=0)
 
+            model.w2 -= learning_rate * gw2
+            model.b2 -= learning_rate * gb2
+            model.w1 -= learning_rate * gw1
+            model.b1 -= learning_rate * gb1
+
+        # Stim is a decision-level label, trained once per battlefield decision rather
+        # than once per living Marine. Positive weighting avoids the 007/008 "never stim"
+        # majority-class solution.
+        dec_order = rng.permutation(train_dec)
+        for start in range(0, len(dec_order), int(batch_size)):
+            idx = dec_order[start:start + int(batch_size)]
+            gb, sb = G[idx], stim[idx]
             sp = _sigmoid(gb @ model.ws + model.bs)
-            ds = (sp - sb) / len(idx)
+            weights = np.where(sb > 0.5, stim_pos_weight, 1.0)
+            ds = (sp - sb) * weights
+            ds /= max(float(weights.sum()), 1.0)
             gws = gb.T @ ds + weight_decay * model.ws
             gbs = float(ds.sum())
-
-            model.w2 -= learning_rate * gw2; model.b2 -= learning_rate * gb2
-            model.w1 -= learning_rate * gw1; model.b1 -= learning_rate * gb1
-            model.ws -= learning_rate * gws; model.bs -= learning_rate * gbs
+            model.ws -= learning_rate * gws
+            model.bs -= learning_rate * gbs
 
     model.save(output_path)
+
     counts = {a: int((y == i).sum()) for i, a in enumerate(ACTIONS)}
-    decision_rows = 0
-    target_pairs = 0
-    target_matches = 0
-    for line in Path(dataset_path).read_text(encoding="utf-8").splitlines():
-        if not line.strip():
-            continue
-        decision_rows += 1
-        row = json.loads(line)
-        teacher_target = row.get("teacher_priority_target")
-        perception_target = row.get("perception_priority_target")
-        if teacher_target is not None:
-            target_pairs += 1
-            target_matches += int(teacher_target == perception_target)
+    valid_target_pairs = [(a, b) for a, b in target_pairs if b is not None]
+    target_matches = sum(a == b for a, b in valid_target_pairs)
+
     return {
         "samples": int(len(y)),
-        "decision_rows": int(decision_rows),
-        "episodes": int(len(np.unique(seeds))),
-        "priority_target_agreement": (float(target_matches / target_pairs) if target_pairs else None),
-        "train": _metrics(model, X[train_idx], y[train_idx], G[train_idx], stim[train_idx]),
-        "validation": _metrics(model, X[val_idx], y[val_idx], G[val_idx], stim[val_idx]),
+        "decision_rows": int(len(G)),
+        "episodes": int(len(np.unique(action_seeds))),
+        "input_dim": INPUT_DIM,
+        "class_balance": class_balance,
+        "stim_positive_weight": float(stim_pos_weight),
+        "train": {
+            "action": _action_metrics(model, X[train_idx], y[train_idx]),
+            "stim": _stim_metrics(model, G[train_dec], stim[train_dec]),
+        },
+        "validation": {
+            "action": _action_metrics(model, X[val_idx], y[val_idx]),
+            "stim": _stim_metrics(model, G[val_dec], stim[val_dec]),
+        },
         "action_counts": counts,
-        "stim_positive_rate": float(stim.mean()),
+        "priority_target_agreement": (
+            float(target_matches / len(valid_target_pairs)) if valid_target_pairs else None
+        ),
         "output": str(output_path),
     }
