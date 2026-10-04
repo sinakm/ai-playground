@@ -15,7 +15,7 @@ import numpy as np
 
 GLOBAL_KEYS = (
     "baneling_pressure", "clumping_danger", "encirclement_risk",
-    "focus_fire_opportunity", "retreat_pressure", "formation_instability",
+    "focus_fire_opportunity", "retreat_pressure", "formation_instability", "stim_opportunity",
 )
 LOCAL_KEYS = ("personal_danger", "isolation", "escape_pressure", "firing_opportunity")
 ACTIONS = ("kite", "split", "attack", "retreat", "focus_bane", "cover_ally", "bait", "stutter")
