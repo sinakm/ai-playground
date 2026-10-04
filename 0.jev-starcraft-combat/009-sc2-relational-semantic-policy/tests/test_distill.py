@@ -86,3 +86,30 @@ def test_teacher_collector_writes_executed_label(tmp_path):
     assert row["episode_seed"] == 77
     assert row["executed_actions"]["1"] == "kite"
     assert row["perception_priority_target"] == 20
+
+
+def test_class_balancing_recovers_rare_focus_signal(tmp_path):
+    data = tmp_path / "teacher_rel.jsonl"
+    rows = []
+    for seed in range(5):
+        for step in range(40):
+            focus = step % 5 == 0
+            local = _l(0.2)
+            local["should_focus_priority_target"] = 0.95 if focus else 0.05
+            local["priority_target_shootable"] = 0.9 if focus else 0.2
+            rows.append({
+                "episode_seed": seed,
+                "global_activations": _g(0.3),
+                "local_activations": {"1": local},
+                "stim_now": False,
+                "executed_actions": {"1": "focus_bane" if focus else "attack"},
+                "perception_priority_target": 20,
+                "teacher_priority_target": 20,
+            })
+    data.write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
+    out = tmp_path / "rel.json"
+    metrics = train_behavior_clone(
+        data, out, epochs=180, learning_rate=0.08, batch_size=32, seed=4
+    )
+    assert metrics["action_class_weights"]["focus_bane"] > metrics["action_class_weights"]["attack"]
+    assert metrics["validation"]["action_recall"]["focus_bane"] > 0.5
