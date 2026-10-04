@@ -7,6 +7,15 @@ well, but they did not contain enough information to time coordinated actions su
 The change is deliberately representational. Jev remains frozen and the numerical student remains
 tiny. We add semantic **edges** between a Marine and the important entities around it.
 
+## Results so far (round 9a)
+
+50 relational teacher fights (49 wins) -> student validation recall focus_bane 0.34 / cover_ally 0.00
+(sqrt-balanced: 0.50 / 0.51; 008: 0 / 0). Without the commander, seeds 0-19: **student 20/20**
+(6.25 Marines alive), balanced 20/20 (7.10), argmax diagnostic 10/10 (8.5). Same-folder baselines:
+`stutter_all` 20/20 (8.85), `jev_commander_stutter` 20/20 (7.25). Stim head is miscalibrated
+(T=1 stims on 44% of steps vs teacher 5.7%). Details:
+[`../notes/2026-10-04-ep009-findings.md`](../notes/2026-10-04-ep009-findings.md).
+
 ## Architecture
 
 Perception is now two batched Jev calls.

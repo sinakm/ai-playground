@@ -23,6 +23,7 @@ TypeSafe's Jev controls 12 Marines against Banelings and Zerglings in StarCraft 
 | 006 | [SC2 semantic net](0.jev-starcraft-combat/006-sc2-semantic-net/) | TypeSafe Jev | [findings](0.jev-starcraft-combat/notes/2026-10-03-ep006-ep007-findings.md) |
 | 007 | [SC2 trainable semantic policy](0.jev-starcraft-combat/007-sc2-trainable-semantic-policy/) | TypeSafe Jev | [findings](0.jev-starcraft-combat/notes/2026-10-03-ep006-ep007-findings.md) |
 | 008 | [SC2 distilled semantic policy](0.jev-starcraft-combat/008-sc2-distilled-semantic-policy/) | TypeSafe Jev | [findings](0.jev-starcraft-combat/notes/2026-10-03-ep008-findings.md) |
+| 009 | [SC2 relational semantic graph](0.jev-starcraft-combat/009-sc2-relational-semantic-graph/) | TypeSafe Jev | [findings](0.jev-starcraft-combat/notes/2026-10-04-ep009-findings.md) |
 | 009 | [SC2 relational semantic graph](0.jev-starcraft-combat/009-sc2-relational-semantic-graph/) | TypeSafe Jev | pending results |
 
 Start with 001; each episode builds on the previous one.
