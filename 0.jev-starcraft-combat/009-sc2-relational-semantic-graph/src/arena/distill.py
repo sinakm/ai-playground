@@ -295,6 +295,15 @@ def train_behavior_clone(
     model.save(output_path)
 
     counts = {a: int((y == i).sum()) for i, a in enumerate(ACTIONS)}
+    relation_offset = len(GLOBAL_KEYS) + len(LOCAL_KEYS)
+    relational_means_by_action = {}
+    for i, action in enumerate(ACTIONS):
+        mask = y == i
+        relational_means_by_action[action] = {
+            key: (float(X[mask, relation_offset + j].mean()) if np.any(mask) else None)
+            for j, key in enumerate(RELATIONAL_KEYS)
+        }
+
     valid_target_pairs = [(a, b) for a, b in target_pairs if b is not None]
     target_matches = sum(a == b for a, b in valid_target_pairs)
 
@@ -314,6 +323,7 @@ def train_behavior_clone(
             "stim": _stim_metrics(model, G[val_dec], stim[val_dec]),
         },
         "action_counts": counts,
+        "relational_means_by_action": relational_means_by_action,
         "priority_target_agreement": (
             float(target_matches / len(valid_target_pairs)) if valid_target_pairs else None
         ),
