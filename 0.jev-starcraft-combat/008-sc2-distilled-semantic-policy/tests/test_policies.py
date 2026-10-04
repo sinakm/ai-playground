@@ -32,6 +32,6 @@ def test_make_policy():
     assert make_policy("attack_move", seed=0).name == "attack_move"
     assert isinstance(make_policy("random", seed=0), RandomMarine)
     assert make_policy("stutter_all", seed=0).name == "stutter_all"
-    assert POLICY_NAMES == ("attack_move", "random", "stutter_all", "jev_commander", "jev_commander_stutter", "jev_semantic_net", "jev_trainable_semantic")
+    assert POLICY_NAMES == ("attack_move", "random", "stutter_all", "jev_commander", "jev_commander_stutter", "jev_semantic_net", "jev_trainable_semantic", "jev_teacher_collect", "jev_distilled_semantic")
     with pytest.raises(ValueError):
         make_policy("nope", seed=0)
