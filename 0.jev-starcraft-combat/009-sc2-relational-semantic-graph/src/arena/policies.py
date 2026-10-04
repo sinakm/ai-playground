@@ -226,8 +226,6 @@ class JevTeacherCollector:
             semantic_activations=p.global_activations,
             local_activations=p.local_activations,
             relational_activations=p.relational_activations,
-            perception_node_latency_ms=p.node_latency_ms,
-            perception_edge_latency_ms=p.edge_latency_ms,
         )
 
     def observe_executed(self, executed: dict | None) -> None:
