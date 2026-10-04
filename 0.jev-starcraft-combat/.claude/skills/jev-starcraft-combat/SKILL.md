@@ -21,6 +21,7 @@ folder is self-contained (own `pyproject.toml`, README, `src/arena/`, tests,
 | 005 | `005-sc2-stutter-step` | Stutter-step action; background Jev in realtime | 20/20 (stutter_all also 20/20) |
 | 006 | `006-sc2-semantic-net` | Six shared Noul perceptions instead of a commander plan | 16/20 (commander and stutter_all 20/20) |
 | 007 | `007-sc2-trainable-semantic-policy` | Jev as frozen perception, NumPy MLP trained with REINFORCE | no learning in 40 fights; see `notes/` |
+| 008 | `008-sc2-distilled-semantic-policy` | Behavior-clone the 005 commander into an 11-input MLP over Jev perception | 16/20 (teacher 49/50); see `notes/` |
 
 ## Guiding principles
 

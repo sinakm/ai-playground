@@ -64,6 +64,14 @@ also mixed squad stim into a mutually exclusive per-Marine action head. Episode 
 starts a corrected supervised student rather than treating those weak RL weights as useful
 initialization.
 
+## Results so far (round 8a)
+
+50 teacher fights (49 wins) -> 8,860 samples -> student validation accuracy 0.60 (majority 0.32;
+focus_bane and cover_ally recall 0, stim head no better than "never stim"). Student without the
+commander, seeds 0-19, T=1.0: **16/20 wins**, 4.7 Marines alive, 156 ms median, $0.13 for 20
+fights. Same win rate as 006, below the teacher. Details and next steps:
+[`../notes/2026-10-03-ep008-findings.md`](../notes/2026-10-03-ep008-findings.md).
+
 ## 1. Collect teacher demonstrations
 
 Delete the old dataset first if you want a clean replicate:

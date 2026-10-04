@@ -1,0 +1,36 @@
+{
+  "jev_teacher_collect": {
+    "runs": 50,
+    "wins": 49,
+    "win_rate": 0.98,
+    "mean_marines_alive": 7.34,
+    "mean_enemies_killed": 19.92,
+    "mean_fight_seconds": 10.25,
+    "mean_score": 19.6,
+    "mean_survivor_hp": 35.6,
+    "median_latency_ms": 497.4,
+    "p90_latency_ms": 641.3,
+    "late_decisions": 0,
+    "api_errors": 0,
+    "input_tokens": 19575285,
+    "output_tokens": 2284280,
+    "cost_usd": 0.822162
+  },
+  "jev_distilled_semantic": {
+    "runs": 20,
+    "wins": 16,
+    "win_rate": 0.8,
+    "mean_marines_alive": 4.7,
+    "mean_enemies_killed": 18.4,
+    "mean_fight_seconds": 16.25,
+    "mean_score": 16,
+    "mean_survivor_hp": 28.9,
+    "median_latency_ms": 156.1,
+    "p90_latency_ms": 203.6,
+    "late_decisions": 0,
+    "api_errors": 0,
+    "input_tokens": 3147031,
+    "output_tokens": 670907,
+    "cost_usd": 0.132175
+  }
+}
