@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import random
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from dataclasses import dataclass
 from arena import config
 from arena.jev import JevCommanderClient, JevSemanticClient, JevPerceptionClient
 from arena.semantic_policy import SemanticMLP
+from arena.distill import DistilledSemanticMLP
 
 
 @dataclass(frozen=True)
@@ -148,6 +150,140 @@ class JevCommander:
 
 
 
+
+class JevTeacherCollector:
+    """Successful commander controls; frozen Jev perception observes the identical state.
+
+    After code reflexes are applied, observe_executed() stores the perception together with
+    the action that actually ran. This produces aligned supervised data without changing
+    teacher behavior.
+    """
+
+    name = "jev_teacher_collect"
+    uses_blackboard = True
+    stutter_default = True
+    soldier_actions = config.COMMANDER_STUTTER_MARINE_ACTIONS
+
+    def __init__(self, seed: int, dataset_path: str | None = None,
+                 commander_client=None, perception_client=None):
+        self.seed = seed
+        self.dataset_path = Path(dataset_path) if dataset_path else None
+        self._commander = commander_client if commander_client is not None else JevCommanderClient()
+        self._perception = perception_client if perception_client is not None else JevPerceptionClient()
+        self._previous_plan = None
+        self._contact_seen = False
+        self._pending = None
+
+    def warmup(self, state: dict) -> None:
+        warm = {**state, "marines": [WARMUP_MARINE], "priority_candidates": []}
+        self._perception.ask(warm, [WARMUP_MARINE["id"]])
+        self._commander.ask(warm, [WARMUP_MARINE["id"]], soldier_actions=self.soldier_actions)
+
+    def decide(self, state: dict) -> Decision:
+        tags = marine_tags(state)
+        nearest = (state.get("summary") or {}).get("nearest_baneling_distance")
+        if nearest is not None and nearest <= config.PRE_CONTACT_DISTANCE:
+            self._contact_seen = True
+
+        p = self._perception.ask(state, tags)
+        a = self._commander.ask(
+            state, tags, previous_plan=self._previous_plan,
+            after_contact=self._contact_seen, soldier_actions=self.soldier_actions,
+        )
+        self._previous_plan = a.plan
+        self._pending = {
+            "episode_seed": self.seed,
+            "global_activations": p.global_activations,
+            "local_activations": {str(k): v for k, v in p.local_activations.items()},
+            "stim_now": bool(a.stim_now),
+            "perception_priority_target": p.priority_target,
+            "teacher_priority_target": a.target_tag,
+            "teacher_plan": a.plan,
+        }
+        action, shares = aggregate(a.actions)
+        confs = list(a.confidences.values())
+        return Decision(
+            action=action, probabilities=shares,
+            confidence=sum(confs) / len(confs) if confs else None,
+            latency_ms=p.latency_ms + a.commander_latency_ms + a.soldier_latency_ms,
+            input_tokens=p.input_tokens + a.input_tokens,
+            output_tokens=p.output_tokens + a.output_tokens,
+            model=a.model,
+            marine_actions=a.actions,
+            marine_confidences=a.confidences,
+            squad_plan=a.plan,
+            priority_target=a.target_tag,
+            commander_latency_ms=a.commander_latency_ms,
+            soldier_latency_ms=a.soldier_latency_ms,
+            stim_now=a.stim_now,
+            plan_kept_low_confidence=a.plan_kept_low_confidence,
+            semantic_activations=p.global_activations,
+            local_activations=p.local_activations,
+        )
+
+    def observe_executed(self, executed: dict | None) -> None:
+        if self.dataset_path is None or self._pending is None or executed is None:
+            return
+        row = {
+            **self._pending,
+            "executed_actions": {str(k): v for k, v in executed.items()},
+        }
+        self.dataset_path.parent.mkdir(parents=True, exist_ok=True)
+        with self.dataset_path.open("a", encoding="utf-8") as out:
+            out.write(json.dumps(row, separators=(",", ":")) + "\n")
+        self._pending = None
+
+
+class JevDistilledSemantic:
+    """Frozen Jev perception -> behavior-cloned numerical student."""
+
+    name = "jev_distilled_semantic"
+    uses_blackboard = True
+    stutter_default = True
+
+    def __init__(self, client: JevPerceptionClient, seed: int,
+                 weights_path: str | None, temperature: float = 0.7):
+        if not weights_path:
+            raise ValueError("jev_distilled_semantic requires --weights")
+        self._client = client
+        self._rng = np.random.default_rng(seed)
+        self.temperature = float(temperature)
+        self.net = DistilledSemanticMLP(seed=seed)
+        self.net.load(weights_path)
+
+    def warmup(self, state: dict) -> None:
+        self._client.ask({**state, "marines": [WARMUP_MARINE], "priority_candidates": []},
+                         [WARMUP_MARINE["id"]])
+
+    def decide(self, state: dict) -> Decision:
+        tags = marine_tags(state)
+        p = self._client.ask(state, tags)
+        actions, confidences = {}, {}
+        chosen_probs = []
+        for tag in tags:
+            action, prob, _ = self.net.act(
+                p.global_activations, p.local_activations[tag], self._rng,
+                temperature=self.temperature,
+            )
+            actions[tag] = action
+            confidences[tag] = 1.0
+            chosen_probs.append(prob)
+
+        stim_now, stim_p = self.net.stim(
+            p.global_activations, self._rng, sample=self.temperature > 0
+        )
+        action, shares = aggregate(actions)
+        return Decision(
+            action=action, probabilities=shares,
+            confidence=sum(chosen_probs) / len(chosen_probs) if chosen_probs else None,
+            latency_ms=p.latency_ms, input_tokens=p.input_tokens, output_tokens=p.output_tokens,
+            model=p.model, marine_actions=actions, marine_confidences=confidences,
+            priority_target=p.priority_target, stim_now=stim_now,
+            semantic_activations=p.global_activations,
+            local_activations=p.local_activations,
+        )
+
+
 class JevTrainableSemantic:
     """Jev perceives; a tiny local MLP chooses actions and can learn from battle reward."""
 
@@ -251,10 +387,10 @@ class JevCommanderStutter(JevCommander):
     soldier_actions = config.COMMANDER_STUTTER_MARINE_ACTIONS
 
 
-POLICY_NAMES = ("attack_move", "random", "stutter_all", "jev_commander", "jev_commander_stutter", "jev_semantic_net", "jev_trainable_semantic")
+POLICY_NAMES = ("attack_move", "random", "stutter_all", "jev_commander", "jev_commander_stutter", "jev_semantic_net", "jev_trainable_semantic", "jev_teacher_collect", "jev_distilled_semantic")
 
 
-def make_policy(name: str, seed: int, jev_client=None, training: bool = False, weights_path: str | None = None):
+def make_policy(name: str, seed: int, jev_client=None, training: bool = False, weights_path: str | None = None, dataset_path: str | None = None, temperature: float = 0.7):
     if name == "attack_move":
         return AttackMove()
     if name == "random":
@@ -269,4 +405,8 @@ def make_policy(name: str, seed: int, jev_client=None, training: bool = False, w
         return JevSemanticNet(jev_client if jev_client is not None else JevSemanticClient())
     if name == "jev_trainable_semantic":
         return JevTrainableSemantic(jev_client if jev_client is not None else JevPerceptionClient(), seed, training, weights_path)
+    if name == "jev_teacher_collect":
+        return JevTeacherCollector(seed, dataset_path=dataset_path)
+    if name == "jev_distilled_semantic":
+        return JevDistilledSemantic(jev_client if jev_client is not None else JevPerceptionClient(), seed, weights_path, temperature)
     raise ValueError(f"unknown policy: {name}")
