@@ -1,10 +1,10 @@
 """Behavior-cloned relational policy for episode 009.
 
 Jev stays frozen and supplies semantic perception. The numerical student has:
-- a shared 17 -> 16 -> 8 per-Marine action head (stim excluded), and
+- a shared 16 -> 16 -> 8 per-Marine action head (stim excluded), and
 - a separate 7 -> 1 squad-stim head.
 
-The 17 inputs are 7 global, 4 local, and 6 relational Jev activations.
+The 16 inputs are 7 global, 4 local, and 5 relational Jev activations.
 
 Teacher data are grouped by episode seed so validation never sees decisions from a
 trajectory used for training.
@@ -22,7 +22,7 @@ GLOBAL_KEYS = (
 LOCAL_KEYS = (
     "personal_danger", "isolation", "escape_pressure", "firing_opportunity",
     "priority_target_shootable", "priority_target_threatens_ally",
-    "should_focus_priority_target", "ally_needs_cover", "can_cover_ally", "bait_role_fit",
+    "should_focus_priority_target", "ally_needs_cover", "can_cover_ally",
 )
 ACTIONS = ("kite", "split", "attack", "retreat", "focus_bane", "cover_ally", "bait", "stutter")
 INPUT_DIM = len(GLOBAL_KEYS) + len(LOCAL_KEYS)
