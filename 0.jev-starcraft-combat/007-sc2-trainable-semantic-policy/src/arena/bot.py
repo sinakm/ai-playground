@@ -452,6 +452,7 @@ class ArenaBot(BotAI):
             "marine_confidences": d.marine_confidences,
             "squad_plan": d.squad_plan,
             "semantic_activations": d.semantic_activations,
+            "local_activations": getattr(d, "local_activations", None),
             "priority_target": d.priority_target,
             "commander_latency_ms": round(d.commander_latency_ms, 1) if d.commander_latency_ms is not None else None,
             "soldier_latency_ms": round(d.soldier_latency_ms, 1) if d.soldier_latency_ms is not None else None,
