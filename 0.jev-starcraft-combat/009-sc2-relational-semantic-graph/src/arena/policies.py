@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from arena import config
 from arena.jev import JevCommanderClient, JevSemanticClient, JevPerceptionClient
 from arena.semantic_policy import SemanticMLP
-from arena.distill import DistilledSemanticMLP
+from arena.distill import RelationalSemanticMLP
 
 
 @dataclass(frozen=True)
@@ -195,6 +195,7 @@ class JevTeacherCollector:
             "episode_seed": self.seed,
             "global_activations": p.global_activations,
             "local_activations": {str(k): v for k, v in p.local_activations.items()},
+            "relational_activations": {str(k): v for k, v in p.relational_activations.items()},
             "stim_now": bool(a.stim_now),
             "perception_priority_target": p.priority_target,
             "teacher_priority_target": a.target_tag,
@@ -219,6 +220,7 @@ class JevTeacherCollector:
             plan_kept_low_confidence=a.plan_kept_low_confidence,
             semantic_activations=p.global_activations,
             local_activations=p.local_activations,
+            relational_activations=p.relational_activations,
         )
 
     def observe_executed(self, executed: dict | None) -> None:
@@ -248,7 +250,7 @@ class JevDistilledSemantic:
         self._client = client
         self._rng = np.random.default_rng(seed)
         self.temperature = float(temperature)
-        self.net = DistilledSemanticMLP(seed=seed)
+        self.net = RelationalSemanticMLP(seed=seed)
         self.net.load(weights_path)
 
     def warmup(self, state: dict) -> None:
@@ -262,7 +264,10 @@ class JevDistilledSemantic:
         chosen_probs = []
         for tag in tags:
             action, prob, _ = self.net.act(
-                p.global_activations, p.local_activations[tag], self._rng,
+                p.global_activations,
+                p.local_activations[tag],
+                p.relational_activations[tag],
+                self._rng,
                 temperature=self.temperature,
             )
             actions[tag] = action
