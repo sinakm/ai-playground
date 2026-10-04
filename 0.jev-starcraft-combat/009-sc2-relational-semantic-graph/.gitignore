@@ -1,0 +1,5 @@
+runs/
+.venv/
+*.wav
+data/*
+!data/teacher_relational.jsonl
