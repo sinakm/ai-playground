@@ -243,6 +243,15 @@ class JevPerceptionAnswer:
     model: str
 
 
+PERCEPTION_GLOBALS = {
+    **config.SEMANTIC_PERCEPTIONS,
+    "stim_opportunity": (
+        "Would using Stim now materially improve squad combat effectiveness, considering enemy proximity, "
+        "Marine health, and whether healthy Marines are already stimmed?"
+    ),
+}
+
+
 LOCAL_PERCEPTIONS = {
     "personal_danger": "Is Marine {tag} personally in immediate danger from nearby enemies, especially Banelings?",
     "isolation": "Is Marine {tag} meaningfully isolated from useful support by the rest of the squad?",
@@ -258,7 +267,7 @@ class JevPerceptionClient:
         self._client = client if client is not None else _default_client()
 
     def ask(self, state: dict, marine_tags: list[int]) -> JevPerceptionAnswer:
-        questions = {key: Noul(instructions=text) for key, text in config.SEMANTIC_PERCEPTIONS.items()}
+        questions = {key: Noul(instructions=text) for key, text in PERCEPTION_GLOBALS.items()}
         target_options = priority_target_options(state.get("priority_candidates") or [])
         if target_options:
             questions[TARGET_KEY] = Choice(
@@ -274,7 +283,7 @@ class JevPerceptionClient:
         start = time.perf_counter()
         r = _system_one(self._client, state, questions)
         latency_ms = (time.perf_counter() - start) * 1000
-        global_a = {k: float(r.answers[k].noul) for k in config.SEMANTIC_PERCEPTIONS}
+        global_a = {k: float(r.answers[k].noul) for k in PERCEPTION_GLOBALS}
         target_answer = r.answers.get(TARGET_KEY) if target_options else None
         target_key = (
             target_answer.choice
