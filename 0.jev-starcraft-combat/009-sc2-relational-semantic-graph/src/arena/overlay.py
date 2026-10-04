@@ -24,8 +24,8 @@ BAR = (76, 114, 176)
 CHOSEN = (85, 168, 104)
 
 POLICY_LABELS = {
-    "jev_teacher_collect": ("TEACHER + OBSERVER", "Jev round 8: collect teacher demonstrations", "commander acts; semantic Jev observes"),
-    "jev_distilled_semantic": ("DISTILLED POLICY", "Jev round 8: distilled semantic policy", "frozen Jev perception -> behavior-cloned local network"),
+    "jev_teacher_collect": ("TEACHER + GRAPH OBSERVER", "Jev round 9: collect relational teacher demonstrations", "commander acts; Jev node/edge perception observes"),
+    "jev_distilled_semantic": ("RELATIONAL STUDENT", "Jev round 9: relational semantic graph", "Jev node + edge perception -> tiny behavior-cloned controller"),
     "jev_trainable_semantic": ("TRAINABLE SEMANTIC", "Jev vs Banelings, round 7: learned semantic policy", "frozen Jev perception -> 10x16x9 local MLP"),
     "jev_semantic_net": ("SEMANTIC NET", "Jev vs Banelings, round 6: semantic neurons", "shared probabilistic perceptions -> per-Marine actions"),
     "jev_commander_stutter": (
