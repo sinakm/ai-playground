@@ -1,7 +1,7 @@
 [project]
-name = "sc2-trainable-semantic-policy"
+name = "sc2-distilled-semantic-policy"
 version = "0.1.0"
-description = "Can a tiny trainable policy learn over frozen Jev semantic perception?"
+description = "Can a behavior-cloned numerical policy distill a successful Jev commander over frozen semantic perception?"
 requires-python = ">=3.12"
 dependencies = [
     "burnysc2==7.3.0",
