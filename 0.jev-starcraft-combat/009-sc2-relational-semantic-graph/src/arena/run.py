@@ -22,10 +22,10 @@ RESULTS_DIR = EP_DIR / "results"
 WARMUP_STATE = {"note": "warmup call before the fight", "rules": config.STATE_RULES}
 
 
-def play_one(policy_name: str, seed: int, runs_dir: Path, realtime: bool, recorder_factory=None, training: bool = False, weights_path: Path | None = None, dataset_path: Path | None = None, temperature: float = 1.0) -> Path:
+def play_one(policy_name: str, seed: int, runs_dir: Path, realtime: bool, recorder_factory=None, training: bool = False, weights_path: Path | None = None, dataset_path: Path | None = None, temperature: float = 1.0, stim_threshold: float = 0.5) -> Path:
     run_dir = runs_dir / f"{policy_name}-{time.strftime('%Y%m%d-%H%M%S')}-s{seed}"
     run_dir.mkdir(parents=True)
-    policy = make_policy(policy_name, seed, training=training, weights_path=str(weights_path) if weights_path else None, dataset_path=str(dataset_path) if dataset_path else None, temperature=temperature)
+    policy = make_policy(policy_name, seed, training=training, weights_path=str(weights_path) if weights_path else None, dataset_path=str(dataset_path) if dataset_path else None, temperature=temperature, stim_threshold=stim_threshold)
     if hasattr(policy, "warmup"):
         policy.warmup(WARMUP_STATE)
     recorder = recorder_factory(run_dir) if recorder_factory else None
@@ -53,10 +53,12 @@ def main(argv: list[str] | None = None) -> None:
     r.add_argument("--realtime", action="store_true")
     r.add_argument("--record", action="store_true", help="capture SC2 window (+ audio); implies --realtime")
     r.add_argument("--no-audio", action="store_true")
-    r.add_argument("--train", action="store_true", help="update episode-007 policy weights after each battle")
+    r.add_argument("--train", action="store_true", help="update legacy episode-007 RL weights after each battle")
     r.add_argument("--weights", type=Path, default=EP_DIR / "models" / "relational_policy.json")
     r.add_argument("--dataset", type=Path, default=EP_DIR / "data" / "teacher_relational.jsonl")
-    r.add_argument("--temperature", type=float, default=1.0, help="student sampling temperature; 0 = argmax")
+    r.add_argument("--temperature", type=float, default=1.0, help="student action sampling temperature; 0 = argmax")
+    r.add_argument("--stim-threshold", type=float, default=0.5, help="deterministic p(stim) threshold; independent of action temperature")
+    r.add_argument("--run-group", type=str, default=None, help="optional runs/<group>/ destination so evaluation variants stay separate")
     bc = sub.add_parser("train-bc", help="train the episode-009 relational student from teacher JSONL")
     bc.add_argument("--dataset", type=Path, default=EP_DIR / "data" / "teacher_relational.jsonl")
     bc.add_argument("--weights", type=Path, default=EP_DIR / "models" / "relational_policy.json")
@@ -66,7 +68,8 @@ def main(argv: list[str] | None = None) -> None:
     bc.add_argument("--seed", type=int, default=0)
     bc.add_argument("--class-balance", choices=("none", "sqrt", "inverse"), default="none")
     bc.add_argument("--no-balance-stim", action="store_true", help="disable positive-class weighting for rare stim labels")
-    sub.add_parser("evaluate", help="aggregate runs/ into results/")
+    e = sub.add_parser("evaluate", help="aggregate runs/ into results/")
+    e.add_argument("--run-group", type=str, default=None, help="aggregate only runs/<group>/ into results/<group>/")
     d = sub.add_parser("render", help="render showcase video for one run dir")
     d.add_argument("--run", type=Path, required=True)
     args = parser.parse_args(argv)
@@ -77,8 +80,9 @@ def main(argv: list[str] | None = None) -> None:
             from arena.record import make_recorder_factory
 
             factory = make_recorder_factory(audio=not args.no_audio)
+        run_root = RUNS_DIR / args.run_group if args.run_group else RUNS_DIR
         for i in range(args.runs):
-            run_dir = play_one(args.policy, args.seed_base + i, RUNS_DIR, args.realtime or args.record, factory, args.train, args.weights, args.dataset, args.temperature)
+            run_dir = play_one(args.policy, args.seed_base + i, run_root, args.realtime or args.record, factory, args.train, args.weights, args.dataset, args.temperature, args.stim_threshold)
             print(f"run {i + 1}/{args.runs}: {run_dir}")
     elif args.cmd == "train-bc":
         import json
@@ -93,7 +97,9 @@ def main(argv: list[str] | None = None) -> None:
     elif args.cmd == "evaluate":
         from arena.evaluate import evaluate, format_table
 
-        print(format_table(evaluate(RUNS_DIR, RESULTS_DIR)))
+        run_root = RUNS_DIR / args.run_group if args.run_group else RUNS_DIR
+        results_root = RESULTS_DIR / args.run_group if args.run_group else RESULTS_DIR
+        print(format_table(evaluate(run_root, results_root)))
     else:
         from arena.overlay import render
 
