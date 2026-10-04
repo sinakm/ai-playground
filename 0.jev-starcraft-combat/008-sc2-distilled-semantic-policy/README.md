@@ -108,13 +108,13 @@ The student now sees only Jev perception plus its learned numerical weights:
       --runs 20 \
       --seed-base 0 \
       --weights models/distilled_policy.json \
-      --temperature 0.7
+      --temperature 1.0
 
 Then:
 
     uv run arena evaluate
 
-Temperature 0.7 is the primary evaluation because the teacher itself is not a deterministic
+Temperature 1.0 is the primary evaluation because the teacher itself is not a deterministic
 argmax classifier and episode 007 showed that near-tied logits make argmax misleading.
 `--temperature 0` is useful as a diagnostic, but should not be the only reported result.
 
