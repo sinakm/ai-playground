@@ -1,12 +1,13 @@
 import json
 import numpy as np
+import pytest
 from types import SimpleNamespace
 
 from arena.distill import (
     ACTIONS, GLOBAL_KEYS, LOCAL_KEYS, RELATIONAL_KEYS,
     RelationalSemanticMLP, train_behavior_clone,
 )
-from arena.policies import JevTeacherCollector
+from arena.policies import JevDistilledSemantic, JevTeacherCollector
 
 
 def _g(v=0.2):
@@ -106,3 +107,50 @@ def test_teacher_collector_writes_relational_executed_label(tmp_path):
     assert row["executed_actions"]["1"] == "kite"
     assert row["relational_activations"]["1"]["cover_effectiveness"] == 0.7
     assert row["perception_priority_target"] == 20
+
+
+def test_student_stim_is_thresholded_even_when_actions_sample(tmp_path):
+    weights = tmp_path / "weights.json"
+    m = RelationalSemanticMLP(seed=1)
+    m.ws[:] = 0.0
+    m.bs = float(np.log(0.49 / 0.51))
+    m.save(weights)
+
+    p = JevDistilledSemantic(
+        client=FakePerception(),
+        seed=0,
+        weights_path=str(weights),
+        temperature=1.0,
+        stim_threshold=0.5,
+    )
+    d = p.decide({"marines": [{"id": 1}], "priority_candidates": []})
+    assert d.stim_probability == pytest.approx(0.49)
+    assert d.stim_now is False
+
+
+def test_student_stim_threshold_is_configurable(tmp_path):
+    weights = tmp_path / "weights.json"
+    m = RelationalSemanticMLP(seed=1)
+    m.ws[:] = 0.0
+    m.bs = float(np.log(0.51 / 0.49))
+    m.save(weights)
+
+    p = JevDistilledSemantic(
+        client=FakePerception(),
+        seed=0,
+        weights_path=str(weights),
+        temperature=1.0,
+        stim_threshold=0.6,
+    )
+    d = p.decide({"marines": [{"id": 1}], "priority_candidates": []})
+    assert d.stim_probability == pytest.approx(0.51)
+    assert d.stim_now is False
+
+    with pytest.raises(ValueError):
+        JevDistilledSemantic(
+            client=FakePerception(),
+            seed=0,
+            weights_path=str(weights),
+            temperature=1.0,
+            stim_threshold=1.1,
+        )
