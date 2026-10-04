@@ -96,7 +96,8 @@ No StarCraft and no Jev calls are needed for this step:
       --epochs 120
 
 The trainer splits by whole episode seed, not random decision rows, so validation trajectories
-are held out. It reports action accuracy/loss, stim accuracy/loss, class counts and sample count.
+are held out. It reports action accuracy/loss, stim accuracy/loss, class counts, sample count,
+and agreement between Jev's referential Baneling perception and the commander's chosen target.
 
 ## 3. Evaluate without the commander
 
