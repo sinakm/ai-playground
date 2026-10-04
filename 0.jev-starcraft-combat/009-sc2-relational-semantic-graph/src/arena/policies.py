@@ -257,6 +257,8 @@ class JevDistilledSemantic:
         self._rng = np.random.default_rng(seed)
         self.temperature = float(temperature)
         self.stim_threshold = float(stim_threshold)
+        if not 0.0 <= self.stim_threshold <= 1.0:
+            raise ValueError("stim_threshold must be between 0 and 1")
         self.net = RelationalSemanticMLP(seed=seed)
         self.net.load(weights_path)
 
