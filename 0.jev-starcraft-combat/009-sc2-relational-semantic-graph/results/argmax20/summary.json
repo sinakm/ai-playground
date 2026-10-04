@@ -1,0 +1,19 @@
+{
+  "jev_distilled_semantic": {
+    "runs": 20,
+    "wins": 20,
+    "win_rate": 1.0,
+    "mean_marines_alive": 8.95,
+    "mean_enemies_killed": 20,
+    "mean_fight_seconds": 14.87,
+    "mean_score": 20,
+    "mean_survivor_hp": 34.2,
+    "median_latency_ms": 326.0,
+    "p90_latency_ms": 390.0,
+    "late_decisions": 0,
+    "api_errors": 0,
+    "input_tokens": 7548207,
+    "output_tokens": 1373740,
+    "cost_usd": 0.317025
+  }
+}
