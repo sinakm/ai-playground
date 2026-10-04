@@ -1,7 +1,7 @@
 [project]
-name = "sc2-trainable-semantic-policy"
+name = "sc2-behavior-cloning"
 version = "0.1.0"
-description = "Can a tiny trainable policy learn over frozen Jev semantic perception?"
+description = "Can a tiny policy behavior-clone a strong commander from frozen Jev semantic perception?"
 requires-python = ">=3.12"
 dependencies = [
     "burnysc2==7.3.0",
