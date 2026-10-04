@@ -170,9 +170,10 @@ class JevTrainableSemantic:
         tags = marine_tags(state)
         p = self._client.ask(state, tags)
         actions, confidences = {}, {}
+        self._step_start = len(self.net.trajectory)
         for tag in tags:
             action, prob, _ = self.net.act(
-                p.global_activations, p.local_activations[tag], self._rng, training=self.training
+                p.global_activations, p.local_activations[tag], self._rng, training=self.training, key=tag
             )
             actions[tag] = action
             # Do not route learned-policy actions through Jev's confidence fallback.
@@ -186,10 +187,16 @@ class JevTrainableSemantic:
             semantic_activations=p.global_activations,
         )
 
+    def observe_executed(self, executed: dict | None) -> None:
+        """Called by the bot after code rules ran: train only on Marine steps that executed the
+        network's own choice."""
+        if self.training:
+            self.net.drop_unexecuted(getattr(self, "_step_start", 0), executed)
+
     def end_episode(self, reward: float) -> None:
         if not self.training:
             return
-        self.net.finish_episode(reward)
+        self.last_advantage = self.net.finish_episode(reward)
         if self.weights_path is not None:
             self.weights_path.parent.mkdir(parents=True, exist_ok=True)
             self.net.save(self.weights_path)

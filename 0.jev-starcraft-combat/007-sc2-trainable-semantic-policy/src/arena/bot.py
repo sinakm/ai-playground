@@ -390,6 +390,8 @@ class ArenaBot(BotAI):
         else:
             executed = None
             orders = plan_orders(d.action, mv, ev)
+        if hasattr(self.policy, "observe_executed"):
+            self.policy.observe_executed(executed)
         self.blackboard.record(mv, ev, executed if executed is not None else {m.id: d.action for m in mv})
         self._reflex_count = stats.get("reflex_count", 0)
         self._low_confidence = stats.get("low_confidence_marines", 0)
@@ -544,6 +546,7 @@ class ArenaBot(BotAI):
             "initial_enemies": initial_enemies,
             "enemies_killed": enemies_killed,
             "training_reward": round(reward, 3),
+            "training_advantage": getattr(self.policy, "last_advantage", None),
             "fight_seconds": round(elapsed / config.LOOPS_PER_SECOND, 2),
             "decisions": self.decisions,
             "late_decisions": self.late,
