@@ -1,8 +1,8 @@
 """Behavior-cloned policy for episode 008.
 
 Jev stays frozen and supplies semantic perception. The numerical student has:
-- a shared 10 -> 16 -> 8 per-Marine action head (stim excluded), and
-- a separate 6 -> 1 squad-stim head.
+- a shared 11 -> 16 -> 8 per-Marine action head (stim excluded), and
+- a separate 7 -> 1 squad-stim head.
 
 Teacher data are grouped by episode seed so validation never sees decisions from a
 trajectory used for training.
