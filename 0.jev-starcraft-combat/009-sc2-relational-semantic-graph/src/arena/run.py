@@ -54,8 +54,8 @@ def main(argv: list[str] | None = None) -> None:
     r.add_argument("--record", action="store_true", help="capture SC2 window (+ audio); implies --realtime")
     r.add_argument("--no-audio", action="store_true")
     r.add_argument("--train", action="store_true", help="update episode-007 policy weights after each battle")
-    r.add_argument("--weights", type=Path, default=EP_DIR / "models" / "distilled_policy.json")
-    r.add_argument("--dataset", type=Path, default=EP_DIR / "data" / "teacher.jsonl")
+    r.add_argument("--weights", type=Path, default=EP_DIR / "models" / "relational_policy.json")
+    r.add_argument("--dataset", type=Path, default=EP_DIR / "data" / "teacher_relational.jsonl")
     r.add_argument("--temperature", type=float, default=1.0, help="student sampling temperature; 0 = argmax")
     bc = sub.add_parser("train-bc", help="train the episode-008 student from teacher JSONL")
     bc.add_argument("--dataset", type=Path, default=EP_DIR / "data" / "teacher.jsonl")
@@ -64,6 +64,8 @@ def main(argv: list[str] | None = None) -> None:
     bc.add_argument("--batch-size", type=int, default=256)
     bc.add_argument("--learning-rate", type=float, default=0.03)
     bc.add_argument("--seed", type=int, default=0)
+    bc.add_argument("--class-balance", choices=("none", "sqrt", "inverse"), default="none")
+    bc.add_argument("--no-balance-stim", action="store_true", help="disable positive-class weighting for rare stim labels")
     sub.add_parser("evaluate", help="aggregate runs/ into results/")
     d = sub.add_parser("render", help="render showcase video for one run dir")
     d.add_argument("--run", type=Path, required=True)
@@ -84,6 +86,8 @@ def main(argv: list[str] | None = None) -> None:
         metrics = train_behavior_clone(
             args.dataset, args.weights, epochs=args.epochs, batch_size=args.batch_size,
             learning_rate=args.learning_rate, seed=args.seed,
+            class_balance=args.class_balance,
+            balance_stim=not args.no_balance_stim,
         )
         print(json.dumps(metrics, indent=2))
     elif args.cmd == "evaluate":
