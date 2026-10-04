@@ -54,8 +54,8 @@ POLICY_LABELS = {
     ),
     "attack_move": ("ATTACK-MOVE", "Attack-move vs Banelings", "baseline: no AI, just charge"),
 }
-PER_MARINE_POLICIES = ("random", "stutter_all", "jev_commander", "jev_commander_stutter")
-COMMANDER_POLICIES = ("jev_commander", "jev_commander_stutter")
+PER_MARINE_POLICIES = ("random", "stutter_all", "jev_commander", "jev_commander_stutter", "jev_relational_teacher", "jev_relational_student")
+COMMANDER_POLICIES = ("jev_commander", "jev_commander_stutter", "jev_relational_teacher")
 
 
 def _font(size: int):
@@ -94,8 +94,12 @@ def _action_list(record: dict) -> dict[str, str]:
     if record.get("policy") == "jev_commander":
         # Stim is the commander's call (shown in the header); retreat_to_squad is a reflex.
         return {**config.COMMANDER_MARINE_ACTIONS, **executed_only}
-    if record.get("policy") == "jev_commander_stutter":
+    if record.get("policy") in ("jev_commander_stutter", "jev_relational_teacher"):
         return {**config.COMMANDER_STUTTER_MARINE_ACTIONS, **executed_only}
+    if record.get("policy") == "jev_relational_student":
+        return {
+            a: t for a, t in config.MARINE_ACTIONS.items() if a != "stim"
+        } | executed_only
     return config.MARINE_ACTIONS
 
 
