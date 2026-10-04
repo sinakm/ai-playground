@@ -22,10 +22,10 @@ RESULTS_DIR = EP_DIR / "results"
 WARMUP_STATE = {"note": "warmup call before the fight", "rules": config.STATE_RULES}
 
 
-def play_one(policy_name: str, seed: int, runs_dir: Path, realtime: bool, recorder_factory=None, training: bool = False, weights_path: Path | None = None) -> Path:
+def play_one(policy_name: str, seed: int, runs_dir: Path, realtime: bool, recorder_factory=None, training: bool = False, weights_path: Path | None = None, dataset_path: Path | None = None, temperature: float = 0.7) -> Path:
     run_dir = runs_dir / f"{policy_name}-{time.strftime('%Y%m%d-%H%M%S')}-s{seed}"
     run_dir.mkdir(parents=True)
-    policy = make_policy(policy_name, seed, training=training, weights_path=str(weights_path) if weights_path else None)
+    policy = make_policy(policy_name, seed, training=training, weights_path=str(weights_path) if weights_path else None, dataset_path=str(dataset_path) if dataset_path else None, temperature=temperature)
     if hasattr(policy, "warmup"):
         policy.warmup(WARMUP_STATE)
     recorder = recorder_factory(run_dir) if recorder_factory else None
@@ -54,7 +54,16 @@ def main(argv: list[str] | None = None) -> None:
     r.add_argument("--record", action="store_true", help="capture SC2 window (+ audio); implies --realtime")
     r.add_argument("--no-audio", action="store_true")
     r.add_argument("--train", action="store_true", help="update episode-007 policy weights after each battle")
-    r.add_argument("--weights", type=Path, default=EP_DIR / "models" / "semantic_policy.json")
+    r.add_argument("--weights", type=Path, default=EP_DIR / "models" / "distilled_policy.json")
+    r.add_argument("--dataset", type=Path, default=EP_DIR / "data" / "teacher.jsonl")
+    r.add_argument("--temperature", type=float, default=0.7, help="student sampling temperature; 0 = argmax")
+    bc = sub.add_parser("train-bc", help="train the episode-008 student from teacher JSONL")
+    bc.add_argument("--dataset", type=Path, default=EP_DIR / "data" / "teacher.jsonl")
+    bc.add_argument("--weights", type=Path, default=EP_DIR / "models" / "distilled_policy.json")
+    bc.add_argument("--epochs", type=int, default=120)
+    bc.add_argument("--batch-size", type=int, default=256)
+    bc.add_argument("--learning-rate", type=float, default=0.03)
+    bc.add_argument("--seed", type=int, default=0)
     sub.add_parser("evaluate", help="aggregate runs/ into results/")
     d = sub.add_parser("render", help="render showcase video for one run dir")
     d.add_argument("--run", type=Path, required=True)
@@ -67,8 +76,16 @@ def main(argv: list[str] | None = None) -> None:
 
             factory = make_recorder_factory(audio=not args.no_audio)
         for i in range(args.runs):
-            run_dir = play_one(args.policy, args.seed_base + i, RUNS_DIR, args.realtime or args.record, factory, args.train, args.weights)
+            run_dir = play_one(args.policy, args.seed_base + i, RUNS_DIR, args.realtime or args.record, factory, args.train, args.weights, args.dataset, args.temperature)
             print(f"run {i + 1}/{args.runs}: {run_dir}")
+    elif args.cmd == "train-bc":
+        import json
+        from arena.distill import train_behavior_clone
+        metrics = train_behavior_clone(
+            args.dataset, args.weights, epochs=args.epochs, batch_size=args.batch_size,
+            learning_rate=args.learning_rate, seed=args.seed,
+        )
+        print(json.dumps(metrics, indent=2))
     elif args.cmd == "evaluate":
         from arena.evaluate import evaluate, format_table
 
