@@ -1,144 +1,152 @@
-# 008 — Distilled Jev semantic policy
+# 009 — Jev relational semantic graph
 
-Episode 008 replaces the weak terminal-reward RL experiment from 007 with teacher distillation.
+Episode 009 targets the failure exposed by 008: the 11 scalar node features predicted movement
+well, but they did not contain enough information to time coordinated actions such as
+`focus_bane` and `cover_ally`.
 
-The successful `jev_commander_stutter` policy controls the battle. At the same decision step,
-a frozen Jev perception call observes the identical state. After code reflexes are applied,
-the episode stores:
-
-    Jev global semantics
-    + Jev local semantics for each Marine
-    + action that actually executed
-    + teacher squad-stim decision
-
-That gives aligned supervised examples instead of asking one terminal reward to explain
-hundreds of Marine decisions.
+The change is deliberately representational. Jev remains frozen and the numerical student remains
+tiny. We add semantic **edges** between a Marine and the important entities around it.
 
 ## Architecture
 
-Jev is still not trained.
+Perception is now two batched Jev calls.
 
-One batched perception call produces:
+Call 1 — semantic nodes:
 
-- 7 global scalar perceptions:
-  - baneling_pressure
-  - clumping_danger
-  - encirclement_risk
-  - focus_fire_opportunity
-  - retreat_pressure
-  - formation_instability
-  - stim_opportunity
-- 4 local scalar perceptions per living Marine:
-  - personal_danger
-  - isolation
-  - escape_pressure
-  - firing_opportunity
-- one referential perception: the Baneling currently posing the strongest threat
+- 7 global activations
+- 4 local activations per Marine
+- one referential priority-Baneling choice
 
-For Marine i:
+Call 2 — semantic edges:
 
-    x_i = [7 global activations, 4 local activations]
+The exact Baneling selected by call 1 is inserted back into the state as
+`semantic_priority_target`. For every living Marine Jev evaluates:
 
-The numerical student is:
+- `target_engagement_value`
+  - would this Marine materially help by attacking that exact target now?
+- `target_threat_to_local_group`
+  - is that target an immediate threat to this Marine or nearby teammates?
+- `ally_needs_cover`
+  - does one of this Marine's nearby teammates need covering fire?
+- `cover_effectiveness`
+  - can this Marine actually provide useful cover without creating disproportionate danger?
 
-    11 inputs -> 16 tanh hidden units -> 8 action logits -> softmax
+So Marine i now receives:
 
-Stim is deliberately not one of those eight actions. The commander can stim and still issue
-a movement/combat order in the same decision window, so episode 008 gives stim its own learned
-global head:
+    7 global node features
+    + 4 local node features
+    + 4 relational edge features
+    = 15 numeric inputs
+
+The student remains:
+
+    15 -> 16 tanh -> 8 action logits -> softmax
+
+Stim is still a separate decision-level head:
 
     7 global inputs -> sigmoid(stim_now)
 
-The eight per-Marine actions are:
+The action head remains shared by every Marine.
 
-    kite, split, attack, retreat, focus_bane, cover_ally, bait, stutter
+## Why two Jev calls?
 
-When the student chooses `focus_bane`, it uses Jev's referential priority-Baneling perception.
-This fixes the entity-identity loss exposed in episode 006.
+The second call must reason about the exact referential Baneling chosen by the first call.
+Trying to ask "which target?" and "should Marine 7 engage that target?" in one independent
+question batch risks the edge question silently reasoning about a different Baneling.
 
-## Why not continue the 007 weights?
+The tradeoff is latency: 009 should be slower than 008's ~156 ms student, but it should still be
+well below the old commander stack if both batched perception calls stay near the historical Jev
+latency.
 
-The latest 007 checkpoint is preserved in episode 007. After 40 fights its action probabilities
-were still nearly uniform and the argmax policy mostly collapsed to `bait`. The architecture
-also mixed squad stim into a mutually exclusive per-Marine action head. Episode 008 intentionally
-starts a corrected supervised student rather than treating those weak RL weights as useful
-initialization.
+## Teacher data
 
-## Results so far (round 8a)
+Episode 008's committed dataset cannot be reused for the primary 009 experiment because it has no
+relational activations. Collect a fresh aligned dataset:
 
-50 teacher fights (49 wins) -> 8,860 samples -> student validation accuracy 0.60 (majority 0.32;
-focus_bane and cover_ally recall 0, stim head no better than "never stim"). Student without the
-commander, seeds 0-19, T=1.0: **16/20 wins**, 4.7 Marines alive, 156 ms median, $0.13 for 20
-fights. Same win rate as 006, below the teacher. Details and next steps:
-[`../notes/2026-10-03-ep008-findings.md`](../notes/2026-10-03-ep008-findings.md).
-
-## 1. Collect teacher demonstrations
-
-Delete the old dataset first if you want a clean replicate:
-
-    rm data/teacher.jsonl
-
-Then run the successful commander while the semantic Jev call observes:
-
+    cd 0.jev-starcraft-combat/009-sc2-relational-semantic-graph
     uv sync
     uv run pytest
+
     uv run arena run \
       --policy jev_teacher_collect \
       --runs 50 \
-      --seed-base 2000 \
-      --dataset data/teacher.jsonl
+      --seed-base 3000 \
+      --dataset data/teacher_relational.jsonl
 
-The teacher still owns the battle. The perception call is only an observer. Each JSONL row is
-one decision step and stores the executed labels after reflexes, not merely the commander's raw
-choice.
+The successful commander still controls the fight. Jev node/edge perception only observes.
+Labels are the actions that actually execute after reflexes.
 
-Start with 50 fights. If class coverage is weak, extend to 100.
+## Train locally
 
-## 2. Train locally
-
-No StarCraft and no Jev calls are needed for this step:
+Primary run: do not rebalance action classes initially. That makes the cleanest comparison with
+008 and tests whether the missing information really was relational.
 
     uv run arena train-bc \
-      --dataset data/teacher.jsonl \
-      --weights models/distilled_policy.json \
-      --epochs 120
+      --dataset data/teacher_relational.jsonl \
+      --weights models/relational_policy.json \
+      --epochs 120 \
+      --class-balance none
 
-The trainer splits by whole episode seed, not random decision rows, so validation trajectories
-are held out. It reports action accuracy/loss, stim accuracy/loss, class counts, sample count,
-and agreement between Jev's referential Baneling perception and the commander's chosen target.
+The trainer now reports per-class validation recall directly. The key measurements are
+`focus_bane` and `cover_ally`.
 
-## 3. Evaluate without the commander
+Stim is trained once per battlefield decision rather than duplicated once per living Marine.
+Because stim is rare, its binary loss uses positive-class weighting by default. Disable that only
+for an ablation with `--no-balance-stim`.
 
-The student now sees only Jev perception plus its learned numerical weights:
+If the relational representation helps but a rare class still has poor recall, a secondary
+training ablation is available:
+
+    uv run arena train-bc \
+      --dataset data/teacher_relational.jsonl \
+      --weights models/relational_policy-balanced.json \
+      --epochs 120 \
+      --class-balance sqrt
+
+Do not treat the balanced run as the primary comparison.
+
+## Evaluate without the commander
 
     uv run arena run \
       --policy jev_distilled_semantic \
       --runs 20 \
       --seed-base 0 \
-      --weights models/distilled_policy.json \
+      --weights models/relational_policy.json \
       --temperature 1.0
-
-Then:
 
     uv run arena evaluate
 
-Temperature 1.0 is the primary evaluation because the teacher itself is not a deterministic
-argmax classifier and episode 007 showed that near-tied logits make argmax misleading.
-`--temperature 0` is useful as a diagnostic, but should not be the only reported result.
+Also run an argmax diagnostic:
 
-## What would count as success?
+    uv run arena run \
+      --policy jev_distilled_semantic \
+      --runs 10 \
+      --seed-base 100 \
+      --weights models/relational_policy.json \
+      --temperature 0
 
-The strongest result is not beating StarCraft with a large model. It is compression:
+Keep those runs separate before aggregation if you do not want them mixed.
 
-    variable battlefield
-        -> one frozen Jev perception call
-        -> 11 semantic values per Marine + one referential target
-        -> a few hundred learned numerical parameters
-        -> coordinated behavior
+## Success criteria
 
-If the distilled student approaches the 005 commander's 20/20 performance, then the commander
-has effectively taught a very small numerical control network how to act over Jev semantic
-perception.
+Episode 008 validation recall:
 
-Only after that should we reintroduce RL/self-play as fine-tuning rather than asking RL to
-discover competent behavior from random weights.
+- kite: 0.90
+- split: 0.91
+- attack: 0.69
+- retreat: 0.34
+- focus_bane: 0.00
+- cover_ally: 0.00
+- stutter: 0.56
+
+The main 009 representation test is not merely overall accuracy. It is:
+
+1. `focus_bane` recall becomes materially non-zero on held-out episode seeds.
+2. `cover_ally` recall becomes materially non-zero.
+3. End-to-end win rate/survival improves beyond 008's 16/20 without restoring the commander.
+4. Jev's referential target remains highly aligned with the teacher target.
+5. Student inference remains inside the ~536 ms decision budget.
+
+If those happen, the useful abstraction is no longer just "Jev as sigmoid neurons." It is closer
+to a semantic graph: Jev supplies node state, entity references and edge activations; a tiny
+numerical controller learns the policy on top.
