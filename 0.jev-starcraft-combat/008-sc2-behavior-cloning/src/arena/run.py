@@ -25,6 +25,15 @@ WARMUP_STATE = {"note": "warmup call before the fight", "rules": config.STATE_RU
 def play_one(policy_name: str, seed: int, runs_dir: Path, realtime: bool, recorder_factory=None, training: bool = False, weights_path: Path | None = None, sample_eval: bool = False, temperature: float = 1.0) -> Path:
     run_dir = runs_dir / f"{policy_name}-{time.strftime('%Y%m%d-%H%M%S')}-s{seed}"
     run_dir.mkdir(parents=True)
+    if (
+        policy_name == "jev_trainable_semantic"
+        and not training
+        and weights_path is not None
+        and not weights_path.exists()
+    ):
+        raise FileNotFoundError(
+            f"policy weights not found: {weights_path}. Collect teacher traces and run 'arena clone' first."
+        )
     policy = make_policy(policy_name, seed, training=training, weights_path=str(weights_path) if weights_path else None, sample_eval=sample_eval, temperature=temperature)
     if hasattr(policy, "warmup"):
         policy.warmup(WARMUP_STATE)
@@ -53,7 +62,7 @@ def main(argv: list[str] | None = None) -> None:
     r.add_argument("--realtime", action="store_true")
     r.add_argument("--record", action="store_true", help="capture SC2 window (+ audio); implies --realtime")
     r.add_argument("--no-audio", action="store_true")
-    r.add_argument("--train", action="store_true", help="update episode-007 policy weights after each battle")
+    r.add_argument("--train", action="store_true", help="fine-tune policy weights with episodic REINFORCE after each battle")
     r.add_argument("--weights", type=Path, default=EP_DIR / "models" / "semantic_policy_bc.json")
     r.add_argument("--sample-eval", action="store_true", help="sample actions at evaluation instead of argmax")
     r.add_argument("--temperature", type=float, default=1.0, help="softmax temperature for --sample-eval")
