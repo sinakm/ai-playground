@@ -259,9 +259,39 @@ LOCAL_PERCEPTIONS = {
     "firing_opportunity": "Does Marine {tag} currently have a strong opportunity to deal useful damage without taking disproportionate risk?",
 }
 
+# Episode 009: semantic edges. These describe relationships between a Marine and
+# the priority threat / nearby teammates rather than properties of the Marine alone.
+RELATIONAL_PERCEPTIONS = {
+    "priority_target_shootable": (
+        "Can Marine {tag} effectively shoot the single Baneling that poses the greatest immediate "
+        "threat right now, considering range, positioning, and immediate self-preservation?"
+    ),
+    "priority_target_threatens_ally": (
+        "Is the highest-priority Baneling currently an immediate threat to a teammate that Marine "
+        "{tag} could help protect by shooting it?"
+    ),
+    "should_focus_priority_target": (
+        "Would Marine {tag} materially help the squad by focus-firing the highest-priority Baneling "
+        "right now instead of attacking its nearest enemy?"
+    ),
+    "ally_needs_cover": (
+        "Is there a nearby teammate who is low on health or under pressure and would materially "
+        "benefit from covering fire from Marine {tag} right now?"
+    ),
+    "can_cover_ally": (
+        "Is Marine {tag} well positioned to provide useful covering fire to a threatened nearby "
+        "teammate without exposing itself to immediate Baneling danger?"
+    ),
+    "bait_role_fit": (
+        "Is Marine {tag} currently the best-positioned Marine to pull Banelings away from the rest "
+        "of the squad while preserving an escape route?"
+    ),
+}
+
 
 class JevPerceptionClient:
-    """One batched Jev call: seven global neurons, four local neurons per living Marine, plus a referential Baneling target."""
+    """One batched Jev call: seven global neurons, four local neurons, six relational
+    edge-neurons per living Marine, plus a referential Baneling target."""
 
     def __init__(self, client=None):
         self._client = client if client is not None else _default_client()
@@ -280,6 +310,8 @@ class JevPerceptionClient:
         for tag in marine_tags:
             for key, text in LOCAL_PERCEPTIONS.items():
                 questions[f"local_{tag}_{key}"] = Noul(instructions=text.format(tag=tag))
+            for key, text in RELATIONAL_PERCEPTIONS.items():
+                questions[f"relation_{tag}_{key}"] = Noul(instructions=text.format(tag=tag))
         start = time.perf_counter()
         r = _system_one(self._client, state, questions)
         latency_ms = (time.perf_counter() - start) * 1000
@@ -294,7 +326,8 @@ class JevPerceptionClient:
         local_a = {}
         for tag in marine_tags:
             local_a[tag] = {
-                k: float(r.answers[f"local_{tag}_{k}"].noul) for k in LOCAL_PERCEPTIONS
+                **{k: float(r.answers[f"local_{tag}_{k}"].noul) for k in LOCAL_PERCEPTIONS},
+                **{k: float(r.answers[f"relation_{tag}_{k}"].noul) for k in RELATIONAL_PERCEPTIONS},
             }
         return JevPerceptionAnswer(
             global_a, local_a, priority_target, latency_ms,
