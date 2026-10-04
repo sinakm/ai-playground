@@ -152,14 +152,14 @@ class JevCommander:
 
 
 class JevTeacherCollector:
-    """Successful commander controls; frozen Jev perception observes the identical state.
+    """Successful commander controls; relational Jev perception observes the identical state.
 
     After code reflexes are applied, observe_executed() stores the perception together with
     the action that actually ran. This produces aligned supervised data without changing
     teacher behavior.
     """
 
-    name = "jev_teacher_collect"
+    name = "jev_relational_teacher"
     uses_blackboard = True
     stutter_default = True
     soldier_actions = config.COMMANDER_STUTTER_MARINE_ACTIONS
@@ -235,16 +235,16 @@ class JevTeacherCollector:
 
 
 class JevDistilledSemantic:
-    """Frozen Jev perception -> behavior-cloned numerical student."""
+    """Frozen relational Jev perception -> behavior-cloned numerical student."""
 
-    name = "jev_distilled_semantic"
+    name = "jev_relational_student"
     uses_blackboard = True
     stutter_default = True
 
     def __init__(self, client: JevPerceptionClient, seed: int,
                  weights_path: str | None, temperature: float = 1.0):
         if not weights_path:
-            raise ValueError("jev_distilled_semantic requires --weights")
+            raise ValueError("jev_relational_student requires --weights")
         self._client = client
         self._rng = np.random.default_rng(seed)
         self.temperature = float(temperature)
@@ -387,7 +387,7 @@ class JevCommanderStutter(JevCommander):
     soldier_actions = config.COMMANDER_STUTTER_MARINE_ACTIONS
 
 
-POLICY_NAMES = ("attack_move", "random", "stutter_all", "jev_commander", "jev_commander_stutter", "jev_semantic_net", "jev_trainable_semantic", "jev_teacher_collect", "jev_distilled_semantic")
+POLICY_NAMES = ("attack_move", "random", "stutter_all", "jev_commander", "jev_commander_stutter", "jev_semantic_net", "jev_trainable_semantic", "jev_relational_teacher", "jev_relational_student")
 
 
 def make_policy(name: str, seed: int, jev_client=None, training: bool = False, weights_path: str | None = None, dataset_path: str | None = None, temperature: float = 1.0):
@@ -405,8 +405,8 @@ def make_policy(name: str, seed: int, jev_client=None, training: bool = False, w
         return JevSemanticNet(jev_client if jev_client is not None else JevSemanticClient())
     if name == "jev_trainable_semantic":
         return JevTrainableSemantic(jev_client if jev_client is not None else JevPerceptionClient(), seed, training, weights_path)
-    if name == "jev_teacher_collect":
+    if name == "jev_relational_teacher":
         return JevTeacherCollector(seed, dataset_path=dataset_path)
-    if name == "jev_distilled_semantic":
+    if name == "jev_relational_student":
         return JevDistilledSemantic(jev_client if jev_client is not None else JevPerceptionClient(), seed, weights_path, temperature)
     raise ValueError(f"unknown policy: {name}")
