@@ -20,6 +20,8 @@ TypeSafe's Jev controls 12 Marines against Banelings and Zerglings in StarCraft 
 | 003 | [SC2 marine micro](0.jev-starcraft-combat/003-sc2-marine-micro/) | TypeSafe Jev | [video](https://github.com/sinakm/ai-playground/releases/tag/ep003) |
 | 004 | [SC2 squad commander](0.jev-starcraft-combat/004-sc2-squad-commander/) | TypeSafe Jev | [video](https://github.com/sinakm/ai-playground/releases/tag/ep004) |
 | 005 | [SC2 stutter-step](0.jev-starcraft-combat/005-sc2-stutter-step/) | TypeSafe Jev | [video](https://github.com/sinakm/ai-playground/releases/tag/ep005) |
+| 006 | [SC2 semantic net](0.jev-starcraft-combat/006-sc2-semantic-net/) | TypeSafe Jev | [findings](0.jev-starcraft-combat/notes/2026-10-03-ep006-ep007-findings.md) |
+| 007 | [SC2 trainable semantic policy](0.jev-starcraft-combat/007-sc2-trainable-semantic-policy/) | TypeSafe Jev | [findings](0.jev-starcraft-combat/notes/2026-10-03-ep006-ep007-findings.md) |
 
 Start with 001; each episode builds on the previous one.
 

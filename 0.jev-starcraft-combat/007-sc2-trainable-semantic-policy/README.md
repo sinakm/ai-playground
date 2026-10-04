@@ -35,6 +35,14 @@ Local features:
 The nine outputs are the existing Marine actions: kite, split, attack, stim, retreat,
 focus_bane, cover_ally, bait, stutter.
 
+## Results so far (round 7a)
+
+40 training fights after a trainer fix (learning rate, running reward baseline, credit only for
+executed actions): 12/20 then 13/20 wins, no learning trend, weights moved ~2%, policy still near
+uniform and its argmax collapses to `bait`. Full numbers, the fix and next steps:
+[`../notes/2026-10-03-ep006-ep007-findings.md`](../notes/2026-10-03-ep006-ep007-findings.md).
+Checkpoints: `models/ckpt-000.json`, `ckpt-020.json`, `ckpt-040.json`.
+
 ## Training
 
 The first implementation uses simple episodic REINFORCE. During training the policy samples

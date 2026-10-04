@@ -5,6 +5,8 @@ description: Everything needed to continue the Jev x StarCraft II combat series 
 
 # Jev x StarCraft II combat (series 0)
 
+Episode 006/007 results and open issues: `notes/2026-10-03-ep006-ep007-findings.md`.
+
 TypeSafe's Jev (a "System One" structured-decision model) controls 12 Terran
 Marines against Zerg Banelings and Zerglings in StarCraft II. Each episode
 folder is self-contained (own `pyproject.toml`, README, `src/arena/`, tests,
@@ -17,6 +19,8 @@ folder is self-contained (own `pyproject.toml`, README, `src/arena/`, tests,
 | 003 | `003-sc2-marine-micro` | One question per Marine | 6/10 (random 10/10) |
 | 004 | `004-sc2-squad-commander` | Commander + blackboard + reflexes, rounds 4a-4h | 10/20 at 4f (random 15/20) |
 | 005 | `005-sc2-stutter-step` | Stutter-step action; background Jev in realtime | 20/20 (stutter_all also 20/20) |
+| 006 | `006-sc2-semantic-net` | Six shared Noul perceptions instead of a commander plan | 16/20 (commander and stutter_all 20/20) |
+| 007 | `007-sc2-trainable-semantic-policy` | Jev as frozen perception, NumPy MLP trained with REINFORCE | no learning in 40 fights; see `notes/` |
 
 ## Guiding principles
 
