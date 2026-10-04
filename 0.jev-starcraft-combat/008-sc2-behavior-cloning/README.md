@@ -1,102 +1,160 @@
-# 007 — Trainable Jev semantic policy
+# 008 — Behavior cloning over Jev perception
 
-Episode 007 makes the numerical part real.
+Episode 007 showed that the perception layer is useful but terminal-reward REINFORCE from
+random weights is a poor way to learn the control policy. After 40 fights the weights had moved
+only about 2%, the policy stayed close to uniform, and argmax collapsed mostly to `bait`.
 
-Jev is frozen and used only as perception. One batched Jev call emits six global semantic
-activations plus four local activations for each living Marine. Jev does not choose the
-Marine action.
+Episode 008 changes the learning problem:
 
-For Marine i:
+    strong commander teacher
+             │
+             ├── controls StarCraft
+             │
+    same state ──> frozen Jev perception
+                      │
+             matched semantic features
+                      │
+                      + teacher executed action
+                      ↓
+               behavior cloning
+                      ↓
+             small numerical policy
 
-    x_i = [6 global Jev activations, 4 local Jev activations]
+The episode-007 weights remain preserved in the 007 folder. They are **not** used by default
+here because they are nearly random and biased toward `bait`. You can explicitly pass an
+episode-008-compatible initialization to `arena clone --init-weights ...`, but the normal
+experiment starts fresh.
 
-A tiny local network then chooses the action:
+## Architecture
 
-    10 inputs -> 16 tanh hidden units -> 9 action logits -> softmax
+Jev makes one batched perception call per decision window:
 
-The same network weights are shared by every Marine. This is intentional: a Marine's
-behavior differs because its local semantic activations differ, not because it owns a
-separate model.
+- 6 global Noul activations:
+  - baneling_pressure
+  - clumping_danger
+  - encirclement_risk
+  - focus_fire_opportunity
+  - retreat_pressure
+  - formation_instability
+- 4 local Noul activations for every living Marine:
+  - personal_danger
+  - isolation
+  - escape_pressure
+  - firing_opportunity
+- 1 optional referential Choice:
+  - which candidate Baneling is the most immediate shared threat?
 
-Global features:
-- baneling_pressure
-- clumping_danger
-- encirclement_risk
-- focus_fire_opportunity
-- retreat_pressure
-- formation_instability
+For Marine i the trainable input is still 10 numbers:
 
-Local features:
-- personal_danger
-- isolation
-- escape_pressure
-- firing_opportunity
+    x_i = [6 global activations, 4 local activations]
 
-The nine outputs are the existing Marine actions: kite, split, attack, stim, retreat,
-focus_bane, cover_ally, bait, stutter.
+The action network is:
 
-## Results so far (round 7a)
+    10 -> 16 tanh -> 8 action logits -> softmax
 
-40 training fights after a trainer fix (learning rate, running reward baseline, credit only for
-executed actions): 12/20 then 13/20 wins, no learning trend, weights moved ~2%, policy still near
-uniform and its argmax collapses to `bait`. Full numbers, the fix and next steps:
-[`../notes/2026-10-03-ep006-ep007-findings.md`](../notes/2026-10-03-ep006-ep007-findings.md).
-Checkpoints: `models/ckpt-000.json`, `ckpt-020.json`, `ckpt-040.json`.
+The 8 mutually-exclusive Marine actions are:
 
-## Training
+    kite, split, attack, retreat, focus_bane, cover_ally, bait, stutter
 
-The first implementation uses simple episodic REINFORCE. During training the policy samples
-from its softmax. At the end of each fight it receives:
+Stim is now a **separate global binary head** over the 6 global activations. This matters
+because the successful commander can stim and still issue a movement/fire action in the same
+decision window; a single 9-way action head could not faithfully imitate that behavior.
 
-    reward =
-        enemies_killed if at least one Marine survives else 0
-        + 0.25 * Marines_alive
-        + 0.01 * surviving_HP
+The referential Baneling target is also kept separate from the scalar vector. If the learned
+policy chooses `focus_bane`, the Jev perception target is passed to the existing targeting code.
 
-The original score remains dominant; survival/HP only separates successful policies that
-otherwise all kill 20 enemies.
+## Step 1 — collect matched teacher traces
 
-Weights persist between fights in models/semantic_policy.json. Jev itself is never updated.
+`jev_teacher_collect` uses the successful commander + stutter policy to control the fight while
+the new Jev perception layer observes the **same battlefield state**. The commander behavior is
+unchanged; perception is passive and only adds logging.
 
-Start with a small training run:
+Use paused runs for collection:
 
     uv sync
     uv run pytest
-    uv run arena run --policy jev_trainable_semantic --runs 20 --train --seed-base 1000
 
-If the mechanics look sane, continue to roughly 100-200 training fights in batches. The
-same weights file is loaded and updated after every battle:
+    uv run arena run \
+      --policy jev_teacher_collect \
+      --runs 50 \
+      --seed-base 2000
 
-    uv run arena run --policy jev_trainable_semantic --runs 20 --train --seed-base 1020
+Every decision log now contains:
 
-For evaluation, omit --train. That freezes the saved weights and uses argmax actions:
+- global semantic activations
+- local activations per Marine
+- Jev's perceived priority Baneling
+- commander's actual priority Baneling
+- commander's raw Marine choices
+- executed Marine actions after plan/reflex rules
+- commander stim decision
 
-    uv run arena run --policy jev_trainable_semantic --runs 20 --seed-base 0
+This makes the training pairs matched rather than trying to align unrelated trajectories.
+
+## Step 2 — behavior clone offline
+
+No StarCraft and no Jev calls are needed for this step:
+
+    uv run arena clone
+
+Defaults:
+
+- fresh MLP initialization
+- 150 epochs
+- learning rate 0.03
+- 80/20 split by **whole fight**, not random Marine rows
+- mild inverse-frequency weighting (power 0.5) so rare but important actions such as
+  `split` and `focus_bane` are not ignored
+
+Outputs:
+
+    models/semantic_policy_bc.json
+    models/clone_metrics.json
+
+The metrics include training/validation action accuracy, stim accuracy, teacher win rate, and
+agreement between Jev's perceived priority target and the commander's chosen target.
+
+The held-out split is by battle to avoid leaking adjacent states from the same trajectory into
+both train and validation sets.
+
+## Step 3 — evaluate the cloned policy
+
+Deterministic argmax:
+
+    uv run arena run \
+      --policy jev_trainable_semantic \
+      --weights models/semantic_policy_bc.json \
+      --runs 20 \
+      --seed-base 0
+
+Also test stochastic evaluation, because a cloned policy can represent a multi-modal teacher
+distribution that argmax collapses:
+
+    uv run arena run \
+      --policy jev_trainable_semantic \
+      --weights models/semantic_policy_bc.json \
+      --sample-eval \
+      --temperature 0.7 \
+      --runs 20 \
+      --seed-base 100
+
+Then:
+
     uv run arena evaluate
 
-Use a different file with --weights if you want independent training replicates.
+## Step 4 — only then consider RL fine-tuning
 
-## What this tests
+If behavior cloning produces a competent policy, copy the cloned checkpoint and fine-tune that
+copy with `--train`. Do not ask RL to discover competent behavior from random weights again.
 
-006 asked whether shared semantic activations were useful prompt context for another Jev
-decision. 007 asks a cleaner question:
+## What this experiment answers
 
-    variable battlefield
-        -> frozen Jev semantic sensors
-        -> fixed 10-D vector per Marine
-        -> trainable numerical weights
-        -> action
+The key question is no longer whether a random tiny net can solve StarCraft from one terminal
+reward. It is:
 
-This is deliberately a tiny model. If it cannot learn a useful policy, the first suspects
-should be representation, reward, exploration, or credit assignment—not insufficient model
-capacity.
+> Can a few hundred learned numerical weights reproduce a strong hierarchical commander when
+> their only observation is Jev's compact semantic perception?
 
-## Important caveats
-
-This first trainer uses one terminal reward for all Marine decisions in a battle. Credit
-assignment is therefore crude. It is a proof-of-learning experiment, not a claim that
-REINFORCE is the best optimizer.
-
-The scenario is also still easy for scripted stutter_all. Compare not only win rate but
-Marines alive, survivor HP, fight time, action distribution, and learning across training
-checkpoints.
+A positive result would show that a variable-sized battlefield can be compressed by Jev into a
+small semantic representation from which a conventional trainable network can recover useful
+coordinated behavior.
