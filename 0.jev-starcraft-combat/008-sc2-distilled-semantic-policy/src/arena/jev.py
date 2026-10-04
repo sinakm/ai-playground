@@ -261,7 +261,7 @@ LOCAL_PERCEPTIONS = {
 
 
 class JevPerceptionClient:
-    """One batched Jev call: six global neurons plus four local neurons per living Marine."""
+    """One batched Jev call: seven global neurons, four local neurons per living Marine, plus a referential Baneling target."""
 
     def __init__(self, client=None):
         self._client = client if client is not None else _default_client()
