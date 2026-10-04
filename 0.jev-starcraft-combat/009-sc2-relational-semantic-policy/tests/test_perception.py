@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from arena.jev import JevPerceptionClient, PERCEPTION_GLOBALS, LOCAL_PERCEPTIONS
+from arena.jev import JevPerceptionClient, PERCEPTION_GLOBALS, LOCAL_PERCEPTIONS, RELATIONAL_PERCEPTIONS
 
 
 class FakeSystemOne:
@@ -29,7 +29,9 @@ def test_perception_batches_scalars_locals_and_referential_target():
     a = JevPerceptionClient(client=FakeSystemOne()).ask(state, [1, 2])
     assert set(a.global_activations) == set(PERCEPTION_GLOBALS)
     assert "stim_opportunity" in a.global_activations
-    assert set(a.local_activations[1]) == set(LOCAL_PERCEPTIONS)
-    assert set(a.local_activations[2]) == set(LOCAL_PERCEPTIONS)
+    assert set(a.local_activations[1]) == set(LOCAL_PERCEPTIONS) | set(RELATIONAL_PERCEPTIONS)
+    assert set(a.local_activations[2]) == set(LOCAL_PERCEPTIONS) | set(RELATIONAL_PERCEPTIONS)
+    assert "should_focus_priority_target" in a.local_activations[1]
+    assert "ally_needs_cover" in a.local_activations[1]
     assert a.priority_target == 20
     assert a.input_tokens == 123 and a.output_tokens == 4
