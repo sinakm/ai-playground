@@ -1,6 +1,6 @@
 ---
 name: jev-starcraft-combat
-description: Everything needed to continue the Jev x StarCraft II combat series (episodes 001-005) - guiding principles, environment setup, how the arena and Jev integration work, what was tried, what failed, tech debt and future ideas. Use before starting a new episode or round in this folder, or when debugging the SC2 arena.
+description: Everything needed to continue the Jev x StarCraft II combat series (episodes 001-008) - guiding principles, environment setup, how the arena and Jev integration work, what was tried, what failed, tech debt and future ideas. Use before starting a new episode or round in this folder, or when debugging the SC2 arena.
 ---
 
 # Jev x StarCraft II combat (series 0)
@@ -21,6 +21,7 @@ folder is self-contained (own `pyproject.toml`, README, `src/arena/`, tests,
 | 005 | `005-sc2-stutter-step` | Stutter-step action; background Jev in realtime | 20/20 (stutter_all also 20/20) |
 | 006 | `006-sc2-semantic-net` | Six shared Noul perceptions instead of a commander plan | 16/20 (commander and stutter_all 20/20) |
 | 007 | `007-sc2-trainable-semantic-policy` | Jev as frozen perception, NumPy MLP trained with REINFORCE | no learning in 40 fights; see `notes/` |
+| 008 | `008-sc2-behavior-cloning` | Commander teacher + matched Jev perception -> supervised tiny MLP | pending run |
 
 ## Guiding principles
 
@@ -136,6 +137,8 @@ Worked:
 - Confidence gating (004f): 2/10 -> 10/20 wins.
 - Stutter-step as a code primitive (005): scripted and Jev both 20/20.
 - Background Jev thread in realtime (005b): live wins 0/3 -> 3/3.
+- Jev as pure batched perception (007): 6 global + 4 per-Marine Noul questions in one call ran around 148 ms median in the measured 40-fight run.
+- Matching teacher actions and semantic perception on the exact same state is the preferred dataset design for 008; do not align unrelated trajectories post hoc.
 
 Didn't work:
 - Prompt without a goal: `spread` 100% forever (001).
@@ -152,6 +155,8 @@ Didn't work:
   efficiency, i.e. a missing technique, not decisions.
 - Jev almost never chooses `stim` or `stutter` on its own (stim 0-1%,
   stutter 4%); defaults and commander-level questions did that work.
+- Episode 007 terminal-reward REINFORCE from random MLP weights did not learn in 40 fights: the policy stayed near-uniform and argmax collapsed toward `bait`. Prefer behavior cloning before RL fine-tuning.
+- A scalar semantic vector cannot carry entity identity. Episode 008 therefore keeps the most threatening Baneling as a separate referential perception and keeps squad stim as a separate binary head rather than forcing both into one action softmax.
 
 ## Tech debt
 
