@@ -46,6 +46,33 @@ def load_teacher_run(run_dir: Path):
     return xs, ys, stim_xs, stim_ys
 
 
+def teacher_diagnostics(runs):
+    wins = 0
+    target_total = 0
+    target_matches = 0
+    for run in runs:
+        summary = run / "summary.json"
+        if summary.exists():
+            wins += int(json.loads(summary.read_text(encoding="utf-8")).get("result") == "win")
+        decisions = run / "decisions.jsonl"
+        if not decisions.exists():
+            continue
+        for rec in _records(decisions):
+            if rec.get("policy") != "jev_teacher_collect" or rec.get("action") == "api_error":
+                continue
+            teacher = rec.get("priority_target")
+            perceived = rec.get("perception_target")
+            if teacher is not None and perceived is not None:
+                target_total += 1
+                target_matches += int(teacher == perceived)
+    return {
+        "teacher_wins": wins,
+        "teacher_win_rate": wins / len(runs) if runs else None,
+        "target_comparisons": target_total,
+        "perception_target_agreement": target_matches / target_total if target_total else None,
+    }
+
+
 def _merge(runs):
     xs, ys, sx, sy = [], [], [], []
     for run in runs:
@@ -110,6 +137,7 @@ def train_behavior_clone(
 
     metrics = {
         "teacher_runs": len(runs),
+        **teacher_diagnostics(runs),
         "train_runs": len(train_runs),
         "validation_runs": len(val_runs),
         "train_action_samples": int(len(x)),
