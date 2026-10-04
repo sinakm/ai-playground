@@ -35,6 +35,7 @@ class Decision:
     plan_kept_low_confidence: bool | None = None
     semantic_activations: dict[str, float] | None = None
     local_activations: dict | None = None
+    relational_activations: dict | None = None
 
 
 def marine_tags(state: dict) -> list[int]:
@@ -286,6 +287,7 @@ class JevDistilledSemantic:
             priority_target=p.priority_target, stim_now=stim_now,
             semantic_activations=p.global_activations,
             local_activations=p.local_activations,
+            relational_activations=p.relational_activations,
         )
 
 
@@ -328,6 +330,7 @@ class JevTrainableSemantic:
             model=p.model, marine_actions=actions, marine_confidences=confidences,
             semantic_activations=p.global_activations,
             local_activations=p.local_activations,
+            relational_activations=p.relational_activations,
         )
 
     def observe_executed(self, executed: dict | None) -> None:
