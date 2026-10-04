@@ -281,16 +281,12 @@ RELATIONAL_PERCEPTIONS = {
     "can_cover_ally": (
         "Is Marine {tag} well positioned to provide useful covering fire to a threatened nearby "
         "teammate without exposing itself to immediate Baneling danger?"
-    ),
-    "bait_role_fit": (
-        "Is Marine {tag} currently the best-positioned Marine to pull Banelings away from the rest "
-        "of the squad while preserving an escape route?"
-    ),
+    )
 }
 
 
 class JevPerceptionClient:
-    """One batched Jev call: seven global neurons, four local neurons, six relational
+    """One batched Jev call: seven global neurons, four local neurons, five relational
     edge-neurons per living Marine, plus a referential Baneling target."""
 
     def __init__(self, client=None):
