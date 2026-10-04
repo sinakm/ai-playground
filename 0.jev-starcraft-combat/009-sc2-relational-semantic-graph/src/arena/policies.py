@@ -32,6 +32,7 @@ class Decision:
     commander_latency_ms: float | None = None
     soldier_latency_ms: float | None = None
     stim_now: bool | None = None
+    stim_probability: float | None = None
     plan_kept_low_confidence: bool | None = None
     semantic_activations: dict[str, float] | None = None
     local_activations: dict | None = None
@@ -249,12 +250,15 @@ class JevDistilledSemantic:
     stutter_default = True
 
     def __init__(self, client: JevPerceptionClient, seed: int,
-                 weights_path: str | None, temperature: float = 1.0):
+                 weights_path: str | None, temperature: float = 1.0, stim_threshold: float = 0.5):
         if not weights_path:
             raise ValueError("jev_distilled_semantic requires --weights")
         self._client = client
         self._rng = np.random.default_rng(seed)
         self.temperature = float(temperature)
+        self.stim_threshold = float(stim_threshold)
+        if not 0.0 <= self.stim_threshold <= 1.0:
+            raise ValueError("stim_threshold must be between 0 and 1")
         self.net = RelationalSemanticMLP(seed=seed)
         self.net.load(weights_path)
 
@@ -279,16 +283,18 @@ class JevDistilledSemantic:
             confidences[tag] = 1.0
             chosen_probs.append(prob)
 
-        stim_now, stim_p = self.net.stim(
-            p.global_activations, self._rng, sample=self.temperature > 0
-        )
+        # Stim is a rare global decision, not part of action exploration. Episode 009a
+        # showed that Bernoulli sampling from a weakly separated p(stim) around 0.4 caused
+        # massive over-stimming. Decode it deterministically with a separate threshold.
+        stim_p = self.net.stim_prob(self.net.global_vector(p.global_activations))
+        stim_now = stim_p >= self.stim_threshold
         action, shares = aggregate(actions)
         return Decision(
             action=action, probabilities=shares,
             confidence=sum(chosen_probs) / len(chosen_probs) if chosen_probs else None,
             latency_ms=p.latency_ms, input_tokens=p.input_tokens, output_tokens=p.output_tokens,
             model=p.model, marine_actions=actions, marine_confidences=confidences,
-            priority_target=p.priority_target, stim_now=stim_now,
+            priority_target=p.priority_target, stim_now=stim_now, stim_probability=stim_p,
             semantic_activations=p.global_activations,
             local_activations=p.local_activations,
             relational_activations=p.relational_activations,
@@ -404,7 +410,7 @@ class JevCommanderStutter(JevCommander):
 POLICY_NAMES = ("attack_move", "random", "stutter_all", "jev_commander", "jev_commander_stutter", "jev_semantic_net", "jev_trainable_semantic", "jev_teacher_collect", "jev_distilled_semantic")
 
 
-def make_policy(name: str, seed: int, jev_client=None, training: bool = False, weights_path: str | None = None, dataset_path: str | None = None, temperature: float = 1.0):
+def make_policy(name: str, seed: int, jev_client=None, training: bool = False, weights_path: str | None = None, dataset_path: str | None = None, temperature: float = 1.0, stim_threshold: float = 0.5):
     if name == "attack_move":
         return AttackMove()
     if name == "random":
@@ -422,5 +428,5 @@ def make_policy(name: str, seed: int, jev_client=None, training: bool = False, w
     if name == "jev_teacher_collect":
         return JevTeacherCollector(seed, dataset_path=dataset_path)
     if name == "jev_distilled_semantic":
-        return JevDistilledSemantic(jev_client if jev_client is not None else JevPerceptionClient(), seed, weights_path, temperature)
+        return JevDistilledSemantic(jev_client if jev_client is not None else JevPerceptionClient(), seed, weights_path, temperature, stim_threshold)
     raise ValueError(f"unknown policy: {name}")
